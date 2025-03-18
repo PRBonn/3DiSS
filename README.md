@@ -1,2 +1,2 @@
-# DiSS
-Diffusion Semantic Scenes
+# 3DiSS
+3D Diffusion Semantic Scenes
