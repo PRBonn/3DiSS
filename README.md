@@ -1,52 +1,89 @@
-# Lightning template
+# Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving
 
-How to structure the code of a deep learning project using pytorch lightning
+## Dependencies
 
-## How to start
-- In GitLab:
-  - [Fork][fork] this repo into YOUR personal workspace! <img src="fork_new.png" height="50">
-  - Change the name of the project: "Settings" -> "General project" -> "Project name" : `YOUR_PROJECT`
-  - Change the url of the project: "Settings" -> "Advanced" -> "Rename repository" -> "Path" : `YOUR_PROJECT` (same as above)
-  - Remove fork relationship: "Settings" -> "Advanced" -> "Remove fork relationship"
+Installing python (we have used python 3.8) packages pre-requisites:
 
+`sudo apt install build-essential python3-dev libopenblas-dev`
 
-- In your computer:
-  - If all of the above was done, you can now happily clone `YOUR_PROJECT`
-  - Run `python3 install` in the root directory to install the package. You will be asked for how you want to name your python package.
+`pip3 install -r requirements.txt`
 
-## It's just a package
-With the `install.py` we have installed the package which allows us to import it from anywhere in the system like every other package: 
+Installing MinkowskiEngine:
 
-``` py
-    import YOUR_PROJECT.models.models
+`pip3 install -U MinkowskiEngine==0.5.4 --install-option="--blas=openblas" -v --no-deps`
+
+To setup the code run the following command on the code main directory:
+
+`pip3 install -U -e .`
+
+## SemanticKITTI Dataset
+
+The SemanticKITTI dataset has to be download from the official [site](http://www.semantic-kitti.org/dataset.html#download) and extracted in the following structure:
+
+```
+./lidiff/
+└── Datasets/
+    └── SemanticKITTI
+        └── dataset
+          └── sequences
+            ├── 00/
+            │   ├── velodyne/
+            |   |       ├── 000000.bin
+            |   |       ├── 000001.bin
+            |   |       └── ...
+            │   └── labels/
+            |       ├── 000000.label
+            |       ├── 000001.label
+            |       └── ...
+            ├── 08/ # for validation
+            ├── 11/ # 11-21 for testing
+            └── 21/
+                └── ...
 ```
 
-You don't have to reinstall anything after changing your code.
+## Ground truth generation
 
+To generate the ground complete scenes you can run the `sem_map_from_scans.py` script. This will use the dataset scans and poses to generate the sequence map to be used as ground truth during training:
 
-## Directory structure
-
-``` bash
-└── lightning_project
-    ├── project_name
-    │   ├── experiments
-    │   ├── config
-    │   │   └── config.yaml
-    │   ├── datasets
-    │   │   ├── datasets.py
-    │   │   └── __init__.py
-    │   ├── models
-    │   │   ├── blocks.py
-    │   │   ├── __init__.py
-    │   │   ├── loss.py
-    │   │   └── models.py
-    │   ├── test.py
-    │   ├── train.py
-    │   └── utils
-    │       └── __init__.py
-    ├── README.md
-    ├── requirements.txt
-    ├── install.py
-    └── setup.py
+```
+python3 tools/sem_map_from_scans.py --path Datasets/SemanticKITTI/dataset/sequences/
 ```
 
+Once the sequences map is generated you can then train the model.
+
+## Training the diffusion model
+
+For training the diffusion model, the configurations are defined in `config/config.yaml`, and the training can be started with:
+
+`python3 train.py`
+
+For training the refinement network, the configurations are defined in `config/config_refine.yaml`, and the training can be started with:
+
+`python3 train_refine.py`
+
+## Trained model
+
+You can download the trained model weights and save then to `lidiff/checkpoints/`:
+
+- Diffusion model [weights](https://www.ipb.uni-bonn.de/html/projects/lidiff/diff_net.ckpt)
+- Refinement model [weights](https://www.ipb.uni-bonn.de/html/projects/lidiff/refine_net.ckpt)
+
+## Diffusion Scene Completion Pipeline
+
+For running the scene completion inference we provide a pipeline where both the diffusion and refinement network are loaded and used to complete the scene from an input scan. You can run the pipeline with the command:
+
+`python3 tools/diff_completion_pipeline.py --diff DIFF_CKPT --refine REFINE_CKPT -T DENOISING_STEPS -s CONDITIONING_WEIGHT`
+
+We provide one scan as example in `lidiff/Datasets/test/` so you can directly test it out with our trained model by just running the code above.
+
+## Citation
+
+If you use this repo, please cite as :
+
+```bibtex
+@inproceedings{nunes2024cvpr,
+    author = {Lucas Nunes and Rodrigo Marcuzzi and Benedikt Mersch and Jens Behley and Cyrill Stachniss},
+    title = {{Scaling Diffusion Models to Real-World 3D LiDAR Scene Completion}},
+    booktitle = {{Proc. of the IEEE/CVF Conf. on Computer Vision and Pattern Recognition (CVPR)}},
+    year = {2024}
+}
