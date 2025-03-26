@@ -1,0 +1,37 @@
+experiment:
+    id: VAE_Refine
+
+##Data
+data:
+    data_dir: './Datasets/SemanticKITTI'
+    resolution: 0.1
+    dataloader: 'KITTI'
+    train: [ '00', '01', '02', '03', '04', '05', '06', '07', '09', '10' ]
+    validation: [ '08' ]
+    test: ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
+    scan_window: 40
+    # [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
+    xyz_range_train: [[-25.6, 25.6], [-25.6, 25.6], [-2.2, 4.2]]
+    xyz_range_val: [[-25.6, 25.6], [-25.6, 25.6], [-2.2, 4.2]]
+
+##Training
+train:
+    n_gpus: 6
+    num_workers: 12
+    max_epoch: 50
+    lr: 0.0001
+    kl_w: 0.002
+    sem_w: 1
+    prune_w: 1
+    batch_size: 2
+    refine: False
+
+##Diffusion
+diff:
+  beta_start: 0.0001
+  beta_end: 0.015
+  t_steps: 1000
+
+##Network
+model:
+    out_dim: 20

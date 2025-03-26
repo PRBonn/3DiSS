@@ -1,0 +1,38 @@
+experiment:
+    id: Diff_ScanCond
+
+##Data
+data:
+    data_dir: './Datasets/SemanticKITTI'
+    resolution: 0.1
+    dataloader: 'KITTI'
+    train: [ '00', '01', '02', '03', '04', '05', '06', '07', '09', '10' ]
+    validation: [ '08' ]
+    test: ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
+    # [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
+    xyz_range_train: [[-25.6, 25.6], [-25.6, 25.6], [-2.2, 4.2]]
+    xyz_range_val: [[-25.6, 25.6], [-25.6, 25.6], [-2.2, 4.2]]
+
+##Training
+train:
+    n_gpus: 8
+    num_workers: 20
+    max_epoch: 200
+    lr: 0.0002
+    ema_rate: 0.9999
+    batch_size: 8
+
+##Network
+model:
+    out_dim: 20
+    mid_attn: False
+
+##Diffusion
+diff:
+  beta_start: 0.0001
+  beta_end: 0.015
+  t_steps: 1000
+  s_steps: 1000
+  w_cond: 2.0
+  uncond_prob: 0.1
+  gamma: 5
