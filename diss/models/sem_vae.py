@@ -142,6 +142,8 @@ class AutoEncoder(LightningModule):
         self.iou.reset()
 
     def train_vae(self, batch:dict, batch_idx):
+        # pytorch does not know how to handle sparse operations in the first iteration
+        # so we run the first iteration with fewer data points to avoid over allocating memory
         if self.global_step == 0:
             batch['coords'] = (batch['coords'][0],)
             batch['feats'] = (batch['feats'][0],)
@@ -184,6 +186,11 @@ class AutoEncoder(LightningModule):
         return loss
 
     def refine_decoder(self, batch, batch_idx):
+        # pytorch does not know how to handle sparse operations in the first iteration
+        # so we run the first iteration with fewer data points to avoid over allocating memory
+        if self.global_step == 0:
+            batch['coords'] = (batch['coords'][0],)
+            batch['feats'] = (batch['feats'][0],)
         x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], self.global_step)
         with torch.no_grad():
             occupancy_latent, stride = self.forward(x_occupancy, encoder=True)
