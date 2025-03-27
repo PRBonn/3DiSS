@@ -24,7 +24,7 @@ train:
     sem_w: 1
     prune_w: 1
     batch_size: 2
-    refine: False
+    refine: True
 
 ##Diffusion
 diff:
