@@ -14,12 +14,13 @@ from natsort import natsorted
 from diss.utils.data_map import color_map
 import click
 
-class DiffSemanticCompletion(LightningModule):
-    def __init__(self, diff_path, vae_path, denoising_steps, cond_weight):
+class DiSS(LightningModule):
+    def __init__(self, diff_path, vae_path, denoising_steps, cond_weight, condition):
         super().__init__()
         ckpt_diff = torch.load(diff_path)
         ckpt_vae = torch.load(vae_path)
         self.save_hyperparameters(ckpt_diff['hyper_parameters'])
+        self.condition = condition
         assert denoising_steps <= self.hparams['diff']['t_steps'], \
         f"The number of denoising steps cannot be bigger than T={self.hparams['diff']['t_steps']} (you've set '-T {denoising_steps}')"
 
@@ -35,7 +36,7 @@ class DiffSemanticCompletion(LightningModule):
                 train_range=self.hparams['data']['xyz_range_train'],
                 val_range=self.hparams['data']['xyz_range_val'],
         )
-        self.latent_diff = LatentCondDiffuser(latent_dim=128, mid_attn=self.hparams['model']['mid_attn'], cond_diff=True)
+        self.latent_diff = LatentCondDiffuser(latent_dim=128, mid_attn=self.hparams['model']['mid_attn'], cond_diff=True if condition == 'single_scan' else False)
         print('Loading diffusion weights...')
         self.load_state_dict(ckpt_diff['state_dict'], strict=False)
         print('Loading VAE weights...')
@@ -162,6 +163,15 @@ class DiffSemanticCompletion(LightningModule):
 
         return complete_scan_x0
 
+    def uncond_sample(self, vis=True):
+        latent_shape = torch.Size((1,128,64,64,16))
+        noise_in = torch.randn(latent_shape, device=torch.device('cuda'))
+        x0 = self.uncond_loop(noise_in)
+        decoded_x0 = self.model.forward_decoder(x0)
+        pcd_x0 = self.decode_to_pcd(decoded_x0)
+
+        return pcd_x0
+
     def classfree_forward(self, latent, cond, uncond, t):
         with torch.no_grad():
             x_cond = self.latent_diff(latent, t, cond)
@@ -198,6 +208,28 @@ class DiffSemanticCompletion(LightningModule):
 
         return x_t
 
+    def uncond_loop(self, x_t):
+        self.scheduler_to_cuda()
+        for t in tqdm(range(len(self.dpm_scheduler.timesteps))):
+            t = torch.ones((len(x_t),)).cuda().long() * self.dpm_scheduler.timesteps[t].cuda()
+
+            with torch.no_grad():
+                noise_t = self.latent_diff(x_t, t)
+            x_t_feats = self.dpm_scheduler.step(noise_t, t[0], x_t)['prev_sample']
+            x_t = x_t_feats
+
+            torch.cuda.empty_cache()
+
+        return x_t
+
+    def diff_sample(self, scan=None, vis=True):
+        if self.condition == 'uncond':
+            return self.uncond_sample()
+
+        elif self.condition == 'single_scan':
+            return self.complete_scan(scan)
+
+
 def load_pcd(pcd_file):
     if pcd_file.endswith('.bin'):
         return np.fromfile(pcd_file, dtype=np.float32).reshape((-1,4))[:,:3]
@@ -206,18 +238,7 @@ def load_pcd(pcd_file):
     else:
         print(f"Point cloud format '.{pcd_file.split('.')[-1]}' not supported. (supported formats: .bin (kitti format), .ply)")
 
-@click.command()
-@click.option('--path', '-p', type=str, default='Datasets/test', help='path to the condition scans')
-@click.option('--diff', '-d', type=str, default='checkpoints/diff_net.ckpt', help='path to the diffusion weights')
-@click.option('--vae', '-v', type=str, default='checkpoints/vae_net.ckpt', help='path to the VAE weights')
-@click.option('--denoising_steps', '-T', type=int, default=1000, help='number of denoising steps (default: 1000)')
-@click.option('--cond_weight', '-s', type=float, default=2.0, help='conditioning weight (default: 2.0)')
-def main(path, diff, vae, denoising_steps, cond_weight):
-    exp_dir = diff.split('/')[-1].split('.')[0].replace('=','') + f'_T{denoising_steps}_s{cond_weight}'
-
-    diff_completion = DiffSemanticCompletion(diff, vae, denoising_steps, cond_weight)
-
-    os.makedirs(f'./results/{exp_dir}/diff_x0', exist_ok=True)
+def cond_loop(diff, path, exp_dir):
     pcds = os.listdir(path)
 
     for pcd_path in tqdm(pcds):
@@ -225,9 +246,33 @@ def main(path, diff, vae, denoising_steps, cond_weight):
         points = load_pcd(pcd_file)
         #points[:,2] += 0.3
     
-        diff_scan_x0 = diff_completion.complete_scan(points)
+        diff_scan_x0 = diff.diff_sample(points)
         #diff_scan_x0.estimate_normals()
-        np.savez_compressed(f'./results/{exp_dir}/diff_x0/{count}.npz', diff_scan_x0)
+        np.savez_compressed(f'./results/{exp_dir}/diff_x0/{pcd_path.split(".")[0]}.npz', diff_scan_x0)
+
+def uncond_loop(diff, num_samples, exp_dir):
+    for i in range(num_samples):
+        diff_x0 = diff.diff_sample()
+        np.savez_compressed(f'./results/{exp_dir}/diff_x0/{i}.npz', diff_x0)
+
+@click.command()
+@click.option('--path', '-p', type=str, default='Datasets/test', help='path to the condition scans')
+@click.option('--diff', '-d', type=str, default='checkpoints/diff_net.ckpt', help='path to the diffusion weights')
+@click.option('--vae', '-v', type=str, default='checkpoints/vae_net.ckpt', help='path to the VAE weights')
+@click.option('--denoising_steps', '-T', type=int, default=1000, help='number of denoising steps (default: 1000)')
+@click.option('--cond_weight', '-s', type=float, default=2.0, help='conditioning weight (default: 2.0)')
+@click.option('--condition', '-cond', type=str, default='uncond', help='path to the condition scans')
+@click.option('--num_samples', '-n', type=int, default=10, help='number of uncondtional samples to be generated (default: 10)')
+def main(path, diff, vae, denoising_steps, cond_weight, condition, num_samples):
+    exp_dir = diff.split('/')[-1].split('.')[0].replace('=','') + f'_T{denoising_steps}_s{cond_weight}_{condition}'
+
+    diff = DiSS(diff, vae, denoising_steps, cond_weight, condition)
+
+    os.makedirs(f'./results/{exp_dir}/diff_x0', exist_ok=True)
+    if condition == 'uncond':
+        uncond_loop(diff, num_samples, exp_dir)
+    elif condition == 'single_scan':
+        cond_loop(diff, path, exp_dir)
 
 if __name__ == '__main__':
     main()
