@@ -34,6 +34,7 @@ Then again, installing python packages pre-requisites:
 And installing MinkowskiEngine:
 
 `pip install -U git+https://github.com/NVIDIA/MinkowskiEngine -v --no-deps`
+
 **NOTE**: At the moment, MinkowskiEngine is not compatible with python 3.10+, see this [issue](https://github.com/NVIDIA/MinkowskiEngine/issues/526#issuecomment-1855119728)
 
 ## SemanticKITTI Dataset
