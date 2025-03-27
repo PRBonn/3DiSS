@@ -108,9 +108,9 @@ For running the unconditional scene generation we provide a pipeline where both 
 
 To run the pipeline for the conditional scene generation you can run:
 
-`python tools/diff_pipeline.py --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS -s CONDITIONING_WEIGHT --condition single_scan`
+`python tools/diff_pipeline.py --path PATH_TO_SCANS --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS -s CONDITIONING_WEIGHT --condition single_scan`
 
-Where the LiDAR point clous used as condition should be placed in the `diss/Datasets/test/` directoty. We provide one scan as example in `diss/Datasets/test/` so you can directly test it out with our trained model by just running the code above. By default, the `DENOISING_STEPS` and `CONDITIONING_WEIGHT` parameters are set respectively to `1000` and `2.0`, the same as used in the paper. 
+Where the LiDAR point clouds used as condition should be placed in the `diss/Datasets/test/` directoty. We provide one scan as example in `diss/Datasets/test/` so you can directly test it out with our trained model by just running the code above. By default, the `DENOISING_STEPS` and `CONDITIONING_WEIGHT` parameters are set respectively to `1000` and `2.0`, the same as used in the paper. 
 
 ## Citation
 
