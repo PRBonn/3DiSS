@@ -36,11 +36,11 @@ def set_deterministic():
               help='path to checkpoint file (.ckpt) to resume training.',
               default=None)
 def main(config,weights,checkpoint):
-    print('\033[92m' + f'\nVAE REFINEMENT TRAINING: {self.hparams["train"]["refine"]}\n' + '\033[0m')
     set_deterministic()
     cfg = yaml.safe_load(open(config))
     cfg['git_commit_version'] = str(subprocess.check_output(
             ['git', 'rev-parse', '--short', 'HEAD']).strip())
+    print('\033[92m' + f'\nVAE REFINEMENT TRAINING: {cfg["train"]["refine"]}\n' + '\033[0m')
 
     #Load data and model
     data = datasets.KittiDataModule(cfg)
