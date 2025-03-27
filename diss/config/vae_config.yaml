@@ -16,7 +16,7 @@ data:
 
 ##Training
 train:
-    n_gpus: 1
+    n_gpus: 6
     num_workers: 12
     max_epoch: 50
     lr: 0.0001
