@@ -104,7 +104,7 @@ You can download the trained model weights from the following links:
 
 For running the unconditional scene generation we provide a pipeline where both the diffusion and VAE trained models are loaded and used to generate a novel scene. You can run the pipeline with the command:
 
-`python tools/diff_pipeline.py --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS
+`python tools/diff_pipeline.py --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS`
 
 To run the pipeline for the conditional scene generation you can run:
 
