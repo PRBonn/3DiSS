@@ -122,8 +122,4 @@ If you use this repo, please cite as :
     title = {{Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving}},
     journal = arxiv,
     year = {2025}
-}
-
-
-
-
+}```
