@@ -62,11 +62,11 @@ def get_diff_model(condition, diff_weights, cfg):
               default='uncond')
 @click.option('--test', '-t', is_flag=True, help='test mode')
 def main(config, vae_weights, diff_weights, checkpoint, condition, test):
-    print('\033[92m' + f'\nDIFFUSION TRAINING CONDITION: {condition.upper()}\n' + '\033[0m')
     set_deterministic()
     cfg = yaml.safe_load(open(config))
     cfg['git_commit_version'] = str(subprocess.check_output(
             ['git', 'rev-parse', '--short', 'HEAD']).strip())
+    print('\033[92m' + f'\nDIFFUSION TRAINING CONDITION: {condition.upper()}\n' + '\033[0m')
 
     #Load data and model
     data = datasets.KittiDataModule(cfg) if condition == 'uncond' else datasets.CondKittiDataModule(cfg)
