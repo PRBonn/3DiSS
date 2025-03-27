@@ -15,7 +15,7 @@ from diss.utils.data_map import color_map
 import click
 
 class DiffSemanticCompletion(LightningModule):
-    def __init__(self, diff_path, vae_path, denoising_steps, cond_weight, cond_rescale):
+    def __init__(self, diff_path, vae_path, denoising_steps, cond_weight):
         super().__init__()
         ckpt_diff = torch.load(diff_path)
         ckpt_vae = torch.load(vae_path)
@@ -65,7 +65,6 @@ class DiffSemanticCompletion(LightningModule):
         self.snr_weights = self.snr_weights / (self.snr + 1)
 
         self.hparams['diff']['w_cond'] = cond_weight
-        self.hparams['diff']['cond_rescale'] = cond_rescale
         self.w_uncond = self.hparams['diff']['w_cond']
         
         exp_dir = diff_path.split('/')[-1].split('.')[0].replace('=','')  + f'_T{denoising_steps}_s{cond_weight}'
@@ -213,11 +212,10 @@ def load_pcd(pcd_file):
 @click.option('--vae', '-v', type=str, default='checkpoints/vae_net.ckpt', help='path to the VAE weights')
 @click.option('--denoising_steps', '-T', type=int, default=1000, help='number of denoising steps (default: 1000)')
 @click.option('--cond_weight', '-s', type=float, default=2.0, help='conditioning weight (default: 2.0)')
-@click.option('--cond_rescale', '-r', type=float, default=0.7, help='conditioning weight (default: 0.7)')
-def main(path, diff, vae, denoising_steps, cond_weight, cond_rescale):
+def main(path, diff, vae, denoising_steps, cond_weight):
     exp_dir = diff.split('/')[-1].split('.')[0].replace('=','') + f'_T{denoising_steps}_s{cond_weight}'
 
-    diff_completion = DiffSemanticCompletion(diff, vae, denoising_steps, cond_weight, cond_rescale)
+    diff_completion = DiffSemanticCompletion(diff, vae, denoising_steps, cond_weight)
 
     os.makedirs(f'./results/{exp_dir}/diff_x0', exist_ok=True)
     pcds = os.listdir(path)
