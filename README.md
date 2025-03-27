@@ -104,13 +104,13 @@ You can download the trained model weights from the following links:
 
 For running the unconditional scene generation we provide a pipeline where both the diffusion and VAE trained models are loaded and used to generate a novel scene. You can run the pipeline with the command:
 
-`python tools/diff_pipeline.py --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS -s CONDITIONING_WEIGHT`
+`python tools/diff_pipeline.py --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS
 
-By default, the `DENOISING_STEPS` and `CONDITIONING_WEIGHT` parameters are set respectively to `1000` and `2.0`, the same as used in the paper. To run the pipeline for the conditional scene generation you can run:
+To run the pipeline for the conditional scene generation you can run:
 
 `python tools/diff_pipeline.py --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS -s CONDITIONING_WEIGHT --condition single_scan`
 
-Where the LiDAR point clous used as condition should be placed in the `diss/Datasets/test/` directoty. We provide one scan as example in `diss/Datasets/test/` so you can directly test it out with our trained model by just running the code above.
+Where the LiDAR point clous used as condition should be placed in the `diss/Datasets/test/` directoty. We provide one scan as example in `diss/Datasets/test/` so you can directly test it out with our trained model by just running the code above. By default, the `DENOISING_STEPS` and `CONDITIONING_WEIGHT` parameters are set respectively to `1000` and `2.0`, the same as used in the paper. 
 
 ## Citation
 
