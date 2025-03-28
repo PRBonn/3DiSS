@@ -128,5 +128,7 @@ If you use this repo, please cite as :
     author = {Lucas Nunes and Rodrigo Marcuzzi and Jens Behley and Cyrill Stachniss},
     title = {{Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving}},
     journal = arxiv,
-    year = {2025}
+    year = {2025},
+    volume = {arXiv:2503.21449},
+    url = {https://arxiv.org/pdf/2503.21449},
 }
