@@ -102,10 +102,10 @@ Which will train the model conditioned to the dataset LiDAR point clouds.
 
 You can download the trained model weights from the following links:
 
-- VAE: Coming soon!
-- VAE Refined: Coming soon!
-- Unconditional DDPM: Coming soon!
-- Conditional DDPM: Coming soon!
+- VAE: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/vae.ckpt)
+- VAE Refined: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/vae_refine.ckpt)
+- Unconditional DDPM: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/diff_uncond.ckpt)
+- Conditional DDPM: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/diff_cond.ckpt)
 
 ## Diffusion Inference
 
