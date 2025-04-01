@@ -88,7 +88,7 @@ By default we set the config as used in the paper, training with batch size 2 an
 
 After the VAE is trained you can run the VAE refinement training with:
 
-`python vae_train.py --config config/vae_refine.yaml`
+`python vae_train.py --weights VAE_CKPT --config config/vae_refine.yaml`
 
 Which will do the refinement training **only** on the VAE decoder weights.
 
@@ -96,7 +96,7 @@ Which will do the refinement training **only** on the VAE decoder weights.
 
 After the VAE is trained you can run the folowing command to train the unconditional DDPM:
 
-`python diff_train.py --vae_weights experiments/VAE/default/version_0/checkpoint/VAE_epoch\=49.ckpt`
+`python diff_train.py --vae_weights VAE_CKPT`
 
 By default, the diffusion training is set to be trained as an unconditional DDPM and with the configuration used in the paper, with 8 NVIDIA A40 GPUs. In case you want to change the configuration you can change the file `config/diff.yaml`.
 
@@ -119,17 +119,17 @@ You can download the trained model weights from the following links:
 
 For running the unconditional scene generation we provide a pipeline where both the diffusion and VAE trained models are loaded and used to generate a novel scene. You can run the pipeline with the command:
 
-`python tools/diff_pipeline.py --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS`
+`python tools/diff_pipeline.py --diff DIFF_CKPT --vae VAE_REFINE_CKPT`
 
 To run the pipeline for the conditional scene generation you can run:
 
-`python tools/diff_pipeline.py --path PATH_TO_SCANS --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS -s CONDITIONING_WEIGHT --condition single_scan`
+`python tools/diff_pipeline.py --path PATH_TO_SCANS --diff DIFF_CKPT --vae VAE_REFINE_CKPT --condition single_scan`
 
-By default, the `DENOISING_STEPS` and `CONDITIONING_WEIGHT` parameters are set respectively to `1000` and `2.0`, the same as used in the paper. The generated point cloud will be saved in `results/{EXPERIMENT}/diff_x0`.
+The generated point cloud will be saved in `results/{EXPERIMENT}/diff_x0`.
 
-To visualize the generated pcds we provide a visualization tool which can be used as:
+To visualize the generated point clouds we provide a visualization tool which can be used as:
 
-`python tools/pcd_vis.py -p results/{EXPERIMENT}/diff_x0`
+`python tools/pcd_vis.py --path results/{EXPERIMENT}/diff_x0`
 
 ## Citation
 
