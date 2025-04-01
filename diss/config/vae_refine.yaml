@@ -3,7 +3,7 @@ experiment:
 
 ##Data
 data:
-    data_dir: './Datasets/SemanticKITTI'
+    data_dir: './data/SemanticKITTI'
     resolution: 0.1
     dataloader: 'KITTI'
     train: [ '00', '01', '02', '03', '04', '05', '06', '07', '09', '10' ]

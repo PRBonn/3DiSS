@@ -68,7 +68,7 @@ class DiSS(LightningModule):
         self.hparams['diff']['w_cond'] = cond_weight
         self.w_uncond = self.hparams['diff']['w_cond']
         
-        exp_dir = diff_path.split('/')[-1].split('.')[0].replace('=','')  + f'_T{denoising_steps}_s{cond_weight}'
+        exp_dir = diff_path.split('/')[-1].split('.')[0].replace('=','') + f'_{condition}'
         os.makedirs(f'./results/{exp_dir}', exist_ok=True)
         with open(f'./results/{exp_dir}/exp_config.yaml', 'w+') as exp_config:
             yaml.dump(self.hparams, exp_config)
@@ -248,7 +248,9 @@ def cond_loop(diff, path, exp_dir):
     
         diff_scan_x0 = diff.diff_sample(points)
         #diff_scan_x0.estimate_normals()
+
         np.savez_compressed(f'./results/{exp_dir}/diff_x0/{pcd_path.split(".")[0]}.npz', diff_scan_x0)
+        np.savez_compressed(f'./results/{exp_dir}/cond/{pcd_path.split(".")[0]}.npz', points)
 
 def uncond_loop(diff, num_samples, exp_dir):
     for i in range(num_samples):
@@ -256,7 +258,7 @@ def uncond_loop(diff, num_samples, exp_dir):
         np.savez_compressed(f'./results/{exp_dir}/diff_x0/{i}.npz', diff_x0)
 
 @click.command()
-@click.option('--path', '-p', type=str, default='Datasets/test', help='path to the condition scans')
+@click.option('--path', '-p', type=str, help='path to the condition scans')
 @click.option('--diff', '-d', type=str, default='checkpoints/diff_net.ckpt', help='path to the diffusion weights')
 @click.option('--vae', '-v', type=str, default='checkpoints/vae_net.ckpt', help='path to the VAE weights')
 @click.option('--denoising_steps', '-T', type=int, default=1000, help='number of denoising steps (default: 1000)')
@@ -264,7 +266,7 @@ def uncond_loop(diff, num_samples, exp_dir):
 @click.option('--condition', '-cond', type=str, default='uncond', help='path to the condition scans')
 @click.option('--num_samples', '-n', type=int, default=10, help='number of uncondtional samples to be generated (default: 10)')
 def main(path, diff, vae, denoising_steps, cond_weight, condition, num_samples):
-    exp_dir = diff.split('/')[-1].split('.')[0].replace('=','') + f'_T{denoising_steps}_s{cond_weight}_{condition}'
+    exp_dir = diff.split('/')[-1].split('.')[0].replace('=','') + f'_{condition}'
 
     diff = DiSS(diff, vae, denoising_steps, cond_weight, condition)
 
@@ -272,6 +274,7 @@ def main(path, diff, vae, denoising_steps, cond_weight, condition, num_samples):
     if condition == 'uncond':
         uncond_loop(diff, num_samples, exp_dir)
     elif condition == 'single_scan':
+        os.makedirs(f'./results/{exp_dir}/cond', exist_ok=True)
         cond_loop(diff, path, exp_dir)
 
 if __name__ == '__main__':

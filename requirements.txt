@@ -9,3 +9,4 @@ hdbscan==0.8.28
 natsort==8.1.0
 pykeops==2.1.2
 diffusers==0.18.0
+einops==0.7.0

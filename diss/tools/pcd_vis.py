@@ -45,9 +45,10 @@ def npy_to_pcd(pcd_file):
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
-    color_array = np.array(list(color_map.values()))
-    colors = color_array[labels,::-1]
-    pcd.colors = o3d.utility.Vector3dVector(np.array(colors)/255.)
+    if 'diff_x0' in pcd_file:
+        color_array = np.array(list(color_map.values()))
+        colors = color_array[labels,::-1]
+        pcd.colors = o3d.utility.Vector3dVector(np.array(colors)/255.)
 
     return pcd
 
@@ -57,34 +58,33 @@ def npy_to_pcd(pcd_file):
               '-p',
               type=str,
               default=None)
-@click.option('--lidar_vis', '-l', is_flag=True, help='test mode')
-def main(path, lidar_vis):
-    pcd_list = os.listdir(path)
+def main(path):
+    pcd_list = os.listdir(os.path.join(path,'diff_x0'))
     shuffle(pcd_list)
     pcd_range = [25.6, 25.6, 2.2]
     pcd_res = 1.
     for pcd_file in tqdm(pcd_list):
-        pcd = npy_to_pcd(os.path.join(path, pcd_file))
+        pcd = npy_to_pcd(os.path.join(path, 'diff_x0', pcd_file))
         pcd.estimate_normals()
 
-        if lidar_vis:
-            pcd_lidar = simulate_lidar(pcd,v_fov=(-20.9,6.0), h_res=0.42)
+        if 'single_scan' in path:
+            pcd_lidar = npy_to_pcd(os.path.join(path, 'cond', pcd_file))
             pcd_lidar.estimate_normals()
 
         #o3d.visualization.draw([x0_pcd, x0_snr_avg_pcd])
         process1 = multiprocessing.Process(target=visualize_pcd, args=(pcd, "PCD"))
-        if lidar_vis:
-            process3 = multiprocessing.Process(target=visualize_pcd, args=(pcd_lidar, "PCD LiDAR"))
+        if 'single_scan' in path:
+            process2 = multiprocessing.Process(target=visualize_pcd, args=(pcd_lidar, "PCD LiDAR"))
         
         # Start the processes
         process1.start()
-        if lidar_vis:
-            process3.start()
+        if 'single_scan' in path:
+            process2.start()
         
         # Wait for both processes to complete
         process1.join()
-        if lidar_vis:
-            process3.join()
+        if 'single_scan' in path:
+            process2.join()
 
 
 if __name__ == "__main__":

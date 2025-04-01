@@ -39,7 +39,7 @@ def get_diff_model(condition, diff_weights, cfg):
               '-c',
               type=str,
               help='path to the config file (.yaml)',
-              default=join(dirname(abspath(__file__)),'config/diff_config.yaml'))
+              default=join(dirname(abspath(__file__)),'config/diff.yaml'))
 @click.option('--vae_weights',
               '-v',
               type=str,

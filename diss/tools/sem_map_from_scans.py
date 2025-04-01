@@ -6,6 +6,7 @@ import click
 import tqdm
 import MinkowskiEngine as ME
 from diss.utils.data_map import learning_map
+import torch
 
 def parse_calibration(filename):
     calib = {}
@@ -53,17 +54,22 @@ def load_poses(calib_fname, poses_fname):
     return poses
 
 @click.command()
-@click.option('--path', '-p', type=str, help='path to the scan sequence')
+@click.option('--path', '-p', type=str, default='Datasets/SemanticKITTI/dataset/sequences/', help='path to the scan sequence')
 @click.option('--voxel_size', '-v', type=float, default=0.1, help='voxel size')
-def main(path, voxel_size):
+@click.option('--cpu', '-c', is_flag=True, help='Use CPU')
+def main(path, voxel_size, cpu):
+    device_label = 'cuda' if torch.cuda.is_available() else 'cpu'
+    device_label = 'cpu' if cpu else device_label
+    device = torch.device(device_label)
 
     for seq in ['00','01','02','03','04','05','06','07','08','09','10']:
-        map_points = np.empty((0,4))
+        map_points = torch.empty((0,4)).to(device)
 
-        poses = load_poses(os.path.join(path, seq, 'calib.txt'), os.path.join(path, seq, 'poses.txt'))
+        poses = load_poses(os.path.join(path, seq, 'calib.txt'), os.path.join(path, f'pin_slam_poses/{seq}.txt'))
         for pose, pcd_path in tqdm.tqdm(list(zip(poses, natsorted(os.listdir(os.path.join(path, seq, 'velodyne')))))):
+            pose = torch.from_numpy(pose).float().to(device)
             pcd_file = os.path.join(path, seq, 'velodyne', pcd_path)
-            points = np.fromfile(pcd_file, dtype=np.float32)
+            points = torch.from_numpy(np.fromfile(pcd_file, dtype=np.float32)).to(device_label)
             points = points.reshape(-1,4)
 
             label_file = pcd_file.replace('velodyne', 'labels').replace('.bin', '.label')
@@ -76,25 +82,25 @@ def main(path, voxel_size):
             points = points[static_idx]
             l_set = l_set[static_idx]
             labels = np.vectorize(learning_map.get)(l_set)
+            labels = torch.from_numpy(labels).to(device_label)
 
             # remove flying artifacts
-            dist = np.power(points, 2)
-            dist = np.sqrt(dist.sum(-1))
+            dist = torch.pow(points, 2)
+            dist = torch.sqrt(dist.sum(-1))
             points = points[dist > 3.5]
             labels = labels[dist > 3.5]
 
             points[:,-1] = 1.
             points = points @ pose.T
-            points = np.concatenate((points[:,:3], labels[:,None]), axis=-1)
+            points = torch.cat((points[:,:3], labels[:,None]), axis=-1)
 
-            map_points = np.concatenate((map_points, points), axis=0)
-            _, mapping = ME.utils.sparse_quantize(coordinates=map_points / voxel_size, return_index=True)
+            map_points = torch.cat((map_points, points), axis=0)
+            _, mapping = ME.utils.sparse_quantize(coordinates=map_points / voxel_size, return_index=True, device=device_label)
             map_points = map_points[mapping]
 
 
         print(f'saving map for sequence {seq}')
-        np.save(os.path.join(path, seq, 'sem_map.npy'), map_points)
-
+        np.save(os.path.join(path, seq, 'sem_map.npy'), map_points.cpu().numpy())
 
 if __name__ == '__main__':
     main()

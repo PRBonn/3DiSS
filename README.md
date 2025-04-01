@@ -46,8 +46,8 @@ And installing MinkowskiEngine:
 The SemanticKITTI dataset has to be download from the official [site](http://www.semantic-kitti.org/dataset.html#download) and extracted in the following structure:
 
 ```
-./lidiff/
-└── Datasets/
+./diss/
+└── data/
     └── SemanticKITTI
         └── dataset
           └── sequences
@@ -66,15 +66,17 @@ The SemanticKITTI dataset has to be download from the official [site](http://www
                 └── ...
 ```
 
+For the poses we use [pin-slam](https://github.com/PRBonn/PIN_SLAM) to compute it. You can download the poses from [here](https://www.ipb.uni-bonn.de/html/projects/3diss/pin_slam_poses.zip) and extract it to `./diss/data/SemanticKITTI/datasets/sequences/pin_slam_poses`.
+
 ## Ground truth generation
 
 To generate the ground complete scenes you can run the `sem_map_from_scans.py` script. This will use the dataset scans and poses to generate the sequence map to be used as ground truth during training:
 
 ```
-python tools/sem_map_from_scans.py --path Datasets/SemanticKITTI/dataset/sequences/
+python tools/sem_map_from_scans.py
 ```
 
-Once the sequences map is generated you can then train the VAE and diffusion models
+Once the sequences map is generated you can then train the VAE and diffusion models.
 
 ## VAE Training
 
@@ -82,7 +84,9 @@ To train the VAE you can run the following command:
 
 `python vae_train.py`
 
-In case you want to change the VAE training config you can edit the `config/vae_config.yaml` file. After the VAE is trained you can run the VAE refinement training with:
+By default we set the config as used in the paper, training with batch size 2 and with 6 NVIDIA A40 GPUs. In case you want to change the VAE training config you can edit the `config/vae.yaml` file.
+
+After the VAE is trained you can run the VAE refinement training with:
 
 `python vae_train.py --config config/vae_refine.yaml`
 
@@ -94,9 +98,11 @@ After the VAE is trained you can run the folowing command to train the unconditi
 
 `python diff_train.py --vae_weights experiments/VAE/default/version_0/checkpoint/VAE_epoch\=49.ckpt`
 
-By default, the diffusion training is set to be trained as an unconditional DDPM. For the LiDAR scan conditioning training you can run:
+By default, the diffusion training is set to be trained as an unconditional DDPM and with the configuration used in the paper, with 8 NVIDIA A40 GPUs. In case you want to change the configuration you can change the file `config/diff.yaml`.
 
-`python diff_train.py --vae_weights experiments/VAE/default/version_0/checkpoint/VAE_epoch\=49.ckpt --config config/diff_cond_config.yaml --condition single_scan`
+For the LiDAR scan conditioning training you can run:
+
+`python diff_train.py --vae_weights VAE_CKPT --config config/diff_cond_config.yaml --condition single_scan`
 
 Which will train the model conditioned to the dataset LiDAR point clouds.
 
@@ -119,7 +125,11 @@ To run the pipeline for the conditional scene generation you can run:
 
 `python tools/diff_pipeline.py --path PATH_TO_SCANS --diff DIFF_CKPT --vae VAE_REFINE_CKPT -T DENOISING_STEPS -s CONDITIONING_WEIGHT --condition single_scan`
 
-Where the LiDAR point clouds used as condition should be placed in the `diss/Datasets/test/` directoty. We provide one scan as example in `diss/Datasets/test/` so you can directly test it out with our trained model by just running the code above. By default, the `DENOISING_STEPS` and `CONDITIONING_WEIGHT` parameters are set respectively to `1000` and `2.0`, the same as used in the paper. 
+By default, the `DENOISING_STEPS` and `CONDITIONING_WEIGHT` parameters are set respectively to `1000` and `2.0`, the same as used in the paper. The generated point cloud will be saved in `results/{EXPERIMENT}/diff_x0`.
+
+To visualize the generated pcds we provide a visualization tool which can be used as:
+
+`python tools/pcd_vis.py -p results/{EXPERIMENT}/diff_x0`
 
 ## Citation
 

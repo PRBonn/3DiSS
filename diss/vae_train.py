@@ -24,7 +24,7 @@ def set_deterministic():
               '-c',
               type=str,
               help='path to the config file (.yaml)',
-              default=join(dirname(abspath(__file__)),'config/vae_config.yaml'))
+              default=join(dirname(abspath(__file__)),'config/vae.yaml'))
 @click.option('--weights',
               '-w',
               type=str,
