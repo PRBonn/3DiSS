@@ -54,7 +54,7 @@ def load_poses(calib_fname, poses_fname):
     return poses
 
 @click.command()
-@click.option('--path', '-p', type=str, default='Datasets/SemanticKITTI/dataset/sequences/', help='path to the scan sequence')
+@click.option('--path', '-p', type=str, default='data/SemanticKITTI/dataset/sequences/', help='path to the scan sequence')
 @click.option('--voxel_size', '-v', type=float, default=0.1, help='voxel size')
 @click.option('--cpu', '-c', is_flag=True, help='Use CPU')
 def main(path, voxel_size, cpu):
