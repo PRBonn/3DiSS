@@ -1,6 +1,7 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+import MinkowskiEngine as ME
 from diss.models.minkunet import MinkUNet
 from diss.utils.collations import points_to_tensor
 from diss.utils.data_map import content
@@ -86,16 +87,24 @@ class AutoEncoder(LightningModule):
 
         return loss
 
+    def downsample_target(self, target, stride):
+        target_coords = target.C.float()
+        target_coords[:,1:] /= torch.tensor(stride, device=torch.device('cuda'))
+        _, mapping = ME.utils.sparse_quantize(coordinates=target_coords, return_index=True)
+
+        return target_coords[mapping], target.F[mapping]
+
     def matchSem(self, pred, target):
+        target_coords, target_feats = self.downsample_target(target, pred.tensor_stride)
         # create the full grid from the prediction
         pred_feats = pred.dense()[0].permute(0,2,3,4,1)
 
-        target_coords = target.C.T.long()
+        target_coords = target_coords.T.long()
         # select the grid feats at the target coords
         pred_sem = pred_feats[target_coords[0], target_coords[1], target_coords[2], target_coords[3]]
         torch.cuda.empty_cache()
 
-        return pred_sem, target.F[:,-1]
+        return pred_sem, target_feats[:,-1]
 
     def forward(self, x:torch.Tensor, training=True, encoder=False):
         return self.model(x, training, encoder)
@@ -165,8 +174,18 @@ class AutoEncoder(LightningModule):
 
         loss_prune = loss_prune0 + loss_prune1 + 2*loss_prune2 + 3*loss_prune3
         # semantic prediction loss
-        pred_sem, target_sem = self.matchSem(occupancy_pred[-1], x_occupancy)
-        loss_sem = self.getSemLoss(pred_sem, target_sem.long())
+        pred_sem0, target_sem0 = self.matchSem(occupancy_pred[0], x_occupancy)
+        loss_sem0 = self.getSemLoss(pred_sem0, target_sem0.long())
+        pred_sem1, target_sem1 = self.matchSem(occupancy_pred[1], x_occupancy)
+        loss_sem1 = self.getSemLoss(pred_sem1, target_sem1.long())
+        pred_sem2, target_sem2 = self.matchSem(occupancy_pred[2], x_occupancy)
+        loss_sem2 = self.getSemLoss(pred_sem2, target_sem2.long())
+        pred_sem3, target_sem3 = self.matchSem(occupancy_pred[3], x_occupancy)
+        loss_sem3 = self.getSemLoss(pred_sem3, target_sem3.long())
+        pred_sem4, target_sem4 = self.matchSem(occupancy_pred[4], x_occupancy)
+        loss_sem4 = self.getSemLoss(pred_sem4, target_sem4.long())
+
+        loss_sem = loss_sem0 + loss_sem1 + loss_sem2 + loss_sem3 + loss_sem4
         # KL latent loss (approx to a gaussian)
         loss_latent = self.getLatentLoss(latent_mean, latent_logvar)
 
@@ -216,8 +235,19 @@ class AutoEncoder(LightningModule):
 
         loss_prune = loss_prune0 + loss_prune1 + 2*loss_prune2 + 3*loss_prune3
         # semantic prediction loss
-        pred_sem, target_sem = self.matchSem(occupancy_pred[-1], x_occupancy)
-        loss_sem = self.getSemLoss(pred_sem, target_sem.long())
+        pred_sem0, target_sem0 = self.matchSem(occupancy_pred[0], x_occupancy)
+        loss_sem0 = self.getSemLoss(pred_sem0, target_sem0.long())
+        pred_sem1, target_sem1 = self.matchSem(occupancy_pred[1], x_occupancy)
+        loss_sem1 = self.getSemLoss(pred_sem1, target_sem1.long())
+        pred_sem2, target_sem2 = self.matchSem(occupancy_pred[2], x_occupancy)
+        loss_sem2 = self.getSemLoss(pred_sem2, target_sem2.long())
+        pred_sem3, target_sem3 = self.matchSem(occupancy_pred[3], x_occupancy)
+        loss_sem3 = self.getSemLoss(pred_sem3, target_sem3.long())
+        pred_sem4, target_sem4 = self.matchSem(occupancy_pred[4], x_occupancy)
+        loss_sem4 = self.getSemLoss(pred_sem4, target_sem4.long())
+
+        loss_sem = loss_sem0 + loss_sem1 + loss_sem2 + loss_sem3 + loss_sem4
+
 
         loss = self.hparams['train']['prune_w'] * loss_prune + self.hparams['train']['sem_w']*loss_sem
 

@@ -249,13 +249,13 @@ def cond_loop(diff, path, exp_dir):
         diff_scan_x0 = diff.diff_sample(points)
         #diff_scan_x0.estimate_normals()
 
-        np.savez_compressed(f'./results/{exp_dir}/diff_x0/{pcd_path.split(".")[0]}.npz', diff_scan_x0)
+        np.savez_compressed(f'./results/{exp_dir}/x0/{pcd_path.split(".")[0]}.npz', diff_scan_x0)
         np.savez_compressed(f'./results/{exp_dir}/cond/{pcd_path.split(".")[0]}.npz', points)
 
 def uncond_loop(diff, num_samples, exp_dir):
     for i in range(num_samples):
         diff_x0 = diff.diff_sample()
-        np.savez_compressed(f'./results/{exp_dir}/diff_x0/{i}.npz', diff_x0)
+        np.savez_compressed(f'./results/{exp_dir}/x0/{i}.npz', diff_x0)
 
 @click.command()
 @click.option('--path', '-p', type=str, help='path to the condition scans')
@@ -270,7 +270,7 @@ def main(path, diff, vae, denoising_steps, cond_weight, condition, num_samples):
 
     diff = DiSS(diff, vae, denoising_steps, cond_weight, condition)
 
-    os.makedirs(f'./results/{exp_dir}/diff_x0', exist_ok=True)
+    os.makedirs(f'./results/{exp_dir}/x0', exist_ok=True)
     if condition == 'uncond':
         uncond_loop(diff, num_samples, exp_dir)
     elif condition == 'single_scan':
