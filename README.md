@@ -1,6 +1,6 @@
 # Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving
 
-**[Paper](https://www.ipb.uni-bonn.de/pdfs/nunes2025arxiv.pdf)** **|** **[Supp. Material](https://www.ipb.uni-bonn.de/pdfs/nunes2025arxiv_suppl.pdf)**
+**[Paper](https://www.ipb.uni-bonn.de/pdfs/nunes2025arxiv.pdf)** **|** **[Sup. Material](https://www.ipb.uni-bonn.de/pdfs/nunes2025arxiv_suppl.pdf)**
 
 This repo contains the code for the 3D semantic scene generation method proposed in the paper: "Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving"
 
@@ -110,10 +110,10 @@ Which will train the model conditioned to the dataset LiDAR point clouds.
 
 You can download the trained model weights from the following links:
 
-- VAE: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/vae.ckpt)
-- VAE Refined: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/vae_refine.ckpt)
-- Unconditional DDPM: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/diff_uncond.ckpt)
-- Conditional DDPM: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/diff_cond.ckpt)
+- VAE: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/v1/vae.ckpt)
+- VAE Refined: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/v1/vae_refine.ckpt)
+- Unconditional DDPM: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/v1/diff_uncond.ckpt)
+- Conditional DDPM: [here](https://www.ipb.uni-bonn.de/html/projects/3diss/v1/diff_cond.ckpt)
 
 ## Diffusion Inference
 
