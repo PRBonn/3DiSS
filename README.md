@@ -141,6 +141,5 @@ If you use this repo, please cite as :
     title = {{Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving}},
     journal = arxiv,
     year = {2025},
-    volume = {arXiv:2503.21449},
-    url = {https://arxiv.org/pdf/2503.21449},
+    volume = {arXiv:2503.21449}
 }
