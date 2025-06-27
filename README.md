@@ -10,7 +10,7 @@ In this paper we propose a 3D semantic scene generation method without requiring
 
 ## News
  - We released the v2 of the model in the `layers_sup` branch
- - We released an infinite city generate pipeline [script](https://github.com/PRBonn/3DiSS/blob/layers_sup/diss/tools/city_diff_pipeline.py)
+ - We released an outpainting pipeline for arbitrary scene size generation [script](https://github.com/PRBonn/3DiSS/blob/layers_sup/diss/tools/city_diff_pipeline.py)
 
 ## Dependencies
 
