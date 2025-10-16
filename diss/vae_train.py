@@ -43,7 +43,11 @@ def main(config,weights,checkpoint):
     print('\033[92m' + f'\nVAE REFINEMENT TRAINING: {cfg["train"]["refine"]}\n' + '\033[0m')
 
     #Load data and model
-    data = datasets.KittiDataModule(cfg)
+    if cfg['data']['dataset'] == 'kitti':
+        data = datasets.KittiDataModule(cfg)
+    elif cfg['data']['dataset'] == 'waymo':
+        data = datasets.WaymoDataModule(cfg)
+
     if weights is None:
         model = sem_vae.AutoEncoder(cfg)
     else:

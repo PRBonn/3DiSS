@@ -19,9 +19,13 @@ class AutoEncoder(LightningModule):
         super().__init__()
         # name you hyperparameter hparams, then it will be saved automagically.
         self.save_hyperparameters(hparams)
-        self.sem_weights = 1/torch.tensor(list(content.values()), device=torch.device('cuda'))
-        self.sem_weights /= self.sem_weights.max()
-        self.iou = MulticlassJaccardIndex(num_classes=20, ignore_index=0).cuda()
+        if self.hparams['data']['dataset'] == 'kitti':
+            self.sem_weights = 1/torch.tensor(list(content.values()), device=torch.device('cuda'))
+            self.sem_weights /= self.sem_weights.max()
+        else:
+            self.sem_weights = None
+
+        self.iou = MulticlassJaccardIndex(num_classes=self.hparams['model']['out_dim'], ignore_index=0).cuda()
 
         self.dpm_scheduler = DPMSolverMultistepScheduler(
                 num_train_timesteps=self.hparams['diff']['t_steps'],
@@ -79,7 +83,7 @@ class AutoEncoder(LightningModule):
 
     def getSemLoss(self, x, y):
         # during the first 25 epochs use weights to force the model to consider all classes
-        if self.current_epoch < self.hparams['train']['max_epoch'] / 2 and not self.hparams['train']['refine']:
+        if self.current_epoch < self.hparams['train']['max_epoch'] / 2 and not self.hparams['train']['refine'] and self.sem_weights is not None:
            loss = F.cross_entropy(x, y, ignore_index=0, weight=self.sem_weights.cuda())
         # the last 25 epochs ignore the weights so the model can optimize to achieve highest IoU
         else:
@@ -130,7 +134,7 @@ class AutoEncoder(LightningModule):
         shape = torch.Size([ max(t,p) for t,p in zip(target_,pred_)])
         
         target = target.dense(torch.Size([shape[0],4,shape[1],shape[2],shape[3]]))[0][:,-1,...][:,None,...].permute(0,2,3,4,1)
-        pred = pred.dense(torch.Size([shape[0],20,shape[1],shape[2],shape[3]]))[0].permute(0,2,3,4,1).max(-1)[1][...,None]
+        pred = pred.dense(torch.Size([shape[0],self.hparams['model']['out_dim'],shape[1],shape[2],shape[3]]))[0].permute(0,2,3,4,1).max(-1)[1][...,None]
         
         return self.iou.update(pred, target)
 
