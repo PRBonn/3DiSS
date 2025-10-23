@@ -72,19 +72,20 @@ def main(config,weights,checkpoint):
     print(cfg)
 
     #Setup trainer
-    trainer = Trainer(gpus=cfg['train']['n_gpus'],
+    trainer = Trainer(devices=cfg['train']['n_gpus'],
                       logger=tb_logger,
-                      resume_from_checkpoint=checkpoint,
+                      #resume_from_checkpoint=checkpoint,
                       max_epochs=cfg['train']['max_epoch'],
                       callbacks=[lr_monitor, checkpoint_saver],
                       log_every_n_steps=100,
-                      check_val_every_n_epoch=5,
+                      check_val_every_n_epoch=1,
                       num_sanity_val_steps=0,
-                      accelerator='ddp',
+                      accelerator='gpu',
+                      strategy='ddp_find_unused_parameters_true',
                       )
 
     # Train!
-    trainer.fit(model, data)
+    trainer.fit(model, data, ckpt_path=checkpoint)
 
 if __name__ == "__main__":
     main()

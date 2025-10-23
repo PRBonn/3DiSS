@@ -4,14 +4,15 @@ import torch.nn.functional as F
 import MinkowskiEngine as ME
 from diss.models.minkunet import MinkUNet
 from diss.utils.collations import points_to_tensor
-from diss.utils.data_map import content
+from diss.utils.data_map import content, content_waymo
 import open3d as o3d
 import numpy as np
 from diss.utils.data_map import color_map
 from torchmetrics.classification import MulticlassJaccardIndex
 from diffusers import DPMSolverMultistepScheduler
 
-from pytorch_lightning.core.lightning import LightningModule
+#from pytorch_lightning.core.lightning import LightningModule
+from pytorch_lightning import LightningModule
 
 
 class AutoEncoder(LightningModule):
@@ -23,6 +24,12 @@ class AutoEncoder(LightningModule):
             self.sem_weights = 1/torch.tensor(list(content.values()), device=torch.device('cuda'))
             self.sem_weights /= self.sem_weights.max()
         else:
+            # FOR SOME REASON THIS IS CRASHING! WE NEED TO CHECK IT!
+            #self.sem_weights = 1/torch.tensor(list(content_waymo.values())).cuda()# device=torch.device('cuda'))
+            #self.sem_weights /= self.sem_weights.max()
+            # If the semantic weights are too low the CrossEntropy loss will become NaN
+            #norm_weights = (self.sem_weights - self.sem_weights.min()) / (self.sem_weights.max() - self.sem_weights.min())
+            #self.sem_weights = 0.001 + norm_weights * (1.0 - 0.001)
             self.sem_weights = None
 
         self.iou = MulticlassJaccardIndex(num_classes=self.hparams['model']['out_dim'], ignore_index=0).cuda()
@@ -71,7 +78,8 @@ class AutoEncoder(LightningModule):
         return self.sqrt_alphas_cumprod[t][:,None,None,None,None].cuda() * x + \
                 self.sqrt_one_minus_alphas_cumprod[t][:,None,None,None,None].cuda() * noise
 
-    def getLoss(self, x:torch.Tensor, y:torch.Tensor):
+    def getLoss(self, x, y):
+        torch.cuda.empty_cache()
         return F.binary_cross_entropy(x, y)
 
     def getLatentLoss(self, mean, logvar):
@@ -84,10 +92,10 @@ class AutoEncoder(LightningModule):
     def getSemLoss(self, x, y):
         # during the first 25 epochs use weights to force the model to consider all classes
         if self.current_epoch < self.hparams['train']['max_epoch'] / 2 and not self.hparams['train']['refine'] and self.sem_weights is not None:
-           loss = F.cross_entropy(x, y, ignore_index=0, weight=self.sem_weights.cuda())
+            loss = F.cross_entropy(x, y, ignore_index=0, weight=self.sem_weights.cuda())
         # the last 25 epochs ignore the weights so the model can optimize to achieve highest IoU
         else:
-           loss = F.cross_entropy(x, y, ignore_index=0)
+            loss = F.cross_entropy(x, y, ignore_index=0)
 
         return loss
 
@@ -120,6 +128,10 @@ class AutoEncoder(LightningModule):
         pcd.points = o3d.utility.Vector3dVector(decoded_latent.C[batch_idx,1:].cpu().detach().numpy())
 
         sem_pred = decoded_latent.F[batch_idx].max(dim=1)[1].detach().cpu().numpy()
+        color_map[21] = color_map[18]
+        color_map[22] = color_map[18]
+        color_map[23] = color_map[18]
+        color_map[24] = color_map[18]
         color_array = np.array(list(color_map.values()))
         colors = color_array[sem_pred,::-1]
         pcd.colors = o3d.utility.Vector3dVector(np.array(colors)/255.)
@@ -160,11 +172,14 @@ class AutoEncoder(LightningModule):
         if self.global_step == 0:
             batch['coords'] = (batch['coords'][0],)
             batch['feats'] = (batch['feats'][0],)
+
         x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], self.global_step)
         latent_args, occupancy_pred, pred_prune, target_prune  = self.forward(x_occupancy)
         occupancy_latent, latent_mean, latent_logvar = latent_args
 
+        torch.cuda.empty_cache()
         self.compute_iou(occupancy_pred[-1], x_occupancy)
+        torch.cuda.empty_cache()
 
         # purning/occupancy loss
         loss_prune0 = self.getLoss(pred_prune[0], target_prune[0].float())
@@ -175,8 +190,10 @@ class AutoEncoder(LightningModule):
         loss_prune2 += self.getDiceLoss((pred_prune[2] > 0.5).int(), target_prune[2].int())
         loss_prune3 = self.getLoss(pred_prune[3], target_prune[3].float())
         loss_prune3 += self.getDiceLoss((pred_prune[3] > 0.5).int(), target_prune[3].int())
+        torch.cuda.empty_cache()
 
         loss_prune = loss_prune0 + loss_prune1 + 2*loss_prune2 + 3*loss_prune3
+        torch.cuda.empty_cache()
         # semantic prediction loss
         pred_sem0, target_sem0 = self.matchSem(occupancy_pred[0], x_occupancy)
         loss_sem0 = self.getSemLoss(pred_sem0, target_sem0.long())
@@ -188,10 +205,12 @@ class AutoEncoder(LightningModule):
         loss_sem3 = self.getSemLoss(pred_sem3, target_sem3.long())
         pred_sem4, target_sem4 = self.matchSem(occupancy_pred[4], x_occupancy)
         loss_sem4 = self.getSemLoss(pred_sem4, target_sem4.long())
+        torch.cuda.empty_cache()
 
         loss_sem = loss_sem0 + loss_sem1 + loss_sem2 + loss_sem3 + loss_sem4
         # KL latent loss (approx to a gaussian)
         loss_latent = self.getLatentLoss(latent_mean, latent_logvar)
+        torch.cuda.empty_cache()
 
         loss = self.hparams['train']['prune_w'] * loss_prune + self.hparams['train']['sem_w']*loss_sem + self.hparams['train']['kl_w']*loss_latent
 
