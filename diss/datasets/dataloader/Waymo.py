@@ -163,6 +163,9 @@ class WaymoSet(Dataset):
                 index,#self.points_datapath[index],
                 self.xyz_range,
             )
+
+            if len(sample_data[0]) < 100 or len(sample_data[1]) < 100:
+                return self.__getitem__(index+1)
         except:
             return self.__getitem__(index+1)
 

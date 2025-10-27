@@ -24,13 +24,14 @@ class AutoEncoder(LightningModule):
             self.sem_weights = 1/torch.tensor(list(content.values()), device=torch.device('cuda'))
             self.sem_weights /= self.sem_weights.max()
         else:
-            # FOR SOME REASON THIS IS CRASHING! WE NEED TO CHECK IT!
-            #self.sem_weights = 1/torch.tensor(list(content_waymo.values())).cuda()# device=torch.device('cuda'))
-            #self.sem_weights /= self.sem_weights.max()
-            # If the semantic weights are too low the CrossEntropy loss will become NaN
-            #norm_weights = (self.sem_weights - self.sem_weights.min()) / (self.sem_weights.max() - self.sem_weights.min())
-            #self.sem_weights = 0.001 + norm_weights * (1.0 - 0.001)
-            self.sem_weights = None
+            # Using the weights as for kitti leads to NaNs due to the large differences between max and min values
+            # Rescale loss (log-scale) according to ENet paper: https://arxiv.org/pdf/1606.02147
+            self.sem_weights = torch.tensor(list(content_waymo.values()), dtype=torch.float32)
+            self.sem_weights = 1.0 / torch.log(1.02 + self.sem_weights / self.sem_weights.min())
+            # Then normalize it between 0. and 1.
+            self.sem_weights /= self.sem_weights.max()
+            # Finally, to the power of 3 to increase the discrepancy between the weights (same range as the kitti weights)
+            self.sem_weights = self.sem_weights ** 3
 
         self.iou = MulticlassJaccardIndex(num_classes=self.hparams['model']['out_dim'], ignore_index=0).cuda()
 
@@ -91,7 +92,7 @@ class AutoEncoder(LightningModule):
 
     def getSemLoss(self, x, y):
         # during the first 25 epochs use weights to force the model to consider all classes
-        if self.current_epoch < self.hparams['train']['max_epoch'] / 2 and not self.hparams['train']['refine'] and self.sem_weights is not None:
+        if self.current_epoch < self.hparams['train']['max_epoch'] / 2 and not self.hparams['train']['refine']:# and self.sem_weights is not None:
             loss = F.cross_entropy(x, y, ignore_index=0, weight=self.sem_weights.cuda())
         # the last 25 epochs ignore the weights so the model can optimize to achieve highest IoU
         else:
@@ -173,7 +174,7 @@ class AutoEncoder(LightningModule):
             batch['coords'] = (batch['coords'][0],)
             batch['feats'] = (batch['feats'][0],)
 
-        x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], self.global_step)
+        x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], self.global_step, self.global_rank, batch['filename'])
         latent_args, occupancy_pred, pred_prune, target_prune  = self.forward(x_occupancy)
         occupancy_latent, latent_mean, latent_logvar = latent_args
 
@@ -294,7 +295,7 @@ class AutoEncoder(LightningModule):
         return loss
 
     def validation_step(self, batch:dict, batch_idx):
-        x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], -1) 
+        x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], -1, self.global_rank, batch['filename']) 
         # purning/occupancy loss
         latent_args, occupancy_pred, pred_prune, target_prune = self.forward(x_occupancy, training=False)
         occupancy_latent, latent_mean, latent_logvar = latent_args
@@ -381,7 +382,7 @@ class AutoEncoder(LightningModule):
         scheduler = {
             'scheduler': scheduler,
             'interval': 'epoch',
-            'frequency': 5,
+            'frequency': 1,
         }
 
         return [optimizer], [scheduler]

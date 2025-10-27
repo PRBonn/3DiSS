@@ -1,5 +1,5 @@
 experiment:
-    id: VAE_Waymo
+    id: VAE_Waymo_Weighted
 
 ##Data
 data:

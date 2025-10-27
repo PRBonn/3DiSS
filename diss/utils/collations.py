@@ -54,7 +54,7 @@ def feats_to_coord(p_feats, resolution):
 
     return p_coord.reshape(-1,3)
 
-def points_to_tensor(grid_coords, grid_feats, resolution, train_step):
+def points_to_tensor(grid_coords, grid_feats, resolution, train_step, rank, filename):
     # in the first iteration pytorch uses more memory to figure out how to proper deal with the data for ME (sparse tensors)
     # the memory allocated is way bigger than the actual needed so we limit the amount of points for the first iteration
     if train_step == 0:
@@ -62,8 +62,15 @@ def points_to_tensor(grid_coords, grid_feats, resolution, train_step):
         grid_feats = [ f[:100] for f in grid_feats ]
 
     # add batch index
-    batched_coords = ME.utils.batched_coordinates(list(grid_coords), dtype=torch.float32, device=torch.device('cuda'))
-    batched_feats = ME.utils.batched_coordinates(list(grid_feats), dtype=torch.float32, device=torch.device('cuda'))[:,1:]
+    try:
+        batched_coords = ME.utils.batched_coordinates(list(grid_coords), dtype=torch.float32, device=torch.device('cuda'))
+        batched_feats = ME.utils.batched_coordinates(list(grid_feats), dtype=torch.float32, device=torch.device('cuda'))[:,1:]
+    except:
+        print(f'Rank[{rank}]: Error at batch_idx -> {filename}')
+        import ipdb; ipdb.set_trace()
+        for ccc in list_feats:
+            print(ccc.shape)
+        import sys; sys.exit(0)
 
     x_occupancy = ME.SparseTensor(
         features=batched_feats,
