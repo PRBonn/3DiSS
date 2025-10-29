@@ -382,7 +382,7 @@ class AutoEncoder(LightningModule):
         scheduler = {
             'scheduler': scheduler,
             'interval': 'epoch',
-            'frequency': 1,
+            'frequency': 5,
         }
 
         return [optimizer], [scheduler]
