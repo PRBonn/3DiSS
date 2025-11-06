@@ -13,7 +13,8 @@ import numpy as np
 import open3d as o3d
 from os import makedirs, path
 
-from pytorch_lightning.core.lightning import LightningModule
+#from pytorch_lightning.core.lightning import LightningModule
+from pytorch_lightning import LightningModule
 
 
 class ScanCondDiffLatent(LightningModule):

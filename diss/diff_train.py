@@ -63,13 +63,18 @@ def get_diff_model(condition, diff_weights, cfg):
 @click.option('--test', '-t', is_flag=True, help='test mode')
 def main(config, vae_weights, diff_weights, checkpoint, condition, test):
     set_deterministic()
+
     cfg = yaml.safe_load(open(config))
     cfg['git_commit_version'] = str(subprocess.check_output(
             ['git', 'rev-parse', '--short', 'HEAD']).strip())
     print('\033[92m' + f'\nDIFFUSION TRAINING CONDITION: {condition.upper()}\n' + '\033[0m')
 
+    if cfg['data']['dataset'] == 'kitti':
+        data = datasets.KittiDataModule(cfg) if condition == 'uncond' else datasets.CondKittiDataModule(cfg)
+    elif cfg['data']['dataset'] == 'waymo':
+        data = datasets.WaymoDataModule(cfg)
+
     #Load data and model
-    data = datasets.KittiDataModule(cfg) if condition == 'uncond' else datasets.CondKittiDataModule(cfg)
     model = get_diff_model(condition, diff_weights, cfg)
 
     # load pre-trained vae weights
@@ -95,21 +100,22 @@ def main(config, vae_weights, diff_weights, checkpoint, condition, test):
     print(cfg)
 
     #Setup trainer
-    trainer = Trainer(gpus=cfg['train']['n_gpus'],
+    trainer = Trainer(devices=cfg['train']['n_gpus'],
                       logger=tb_logger,
-                      resume_from_checkpoint=checkpoint,
+                      #resume_from_checkpoint=checkpoint,
                       max_epochs=cfg['train']['max_epoch'],
                       callbacks=[lr_monitor, checkpoint_saver],
                       log_every_n_steps=100,
-                      check_val_every_n_epoch=10,
+                      check_val_every_n_epoch=2,
                       num_sanity_val_steps=0,
-                      accelerator='ddp',
+                      accelerator='gpu',
+                      strategy='ddp_find_unused_parameters_true',
                       )
 
     if not test:
-        trainer.fit(model, data)
+        trainer.fit(model, data, ckpt_path=checkpoint)
     else:
-        trainer.test(model, data)
+        trainer.test(model, data, ckpt_path=checkpoint)
 
 if __name__ == "__main__":
     main()

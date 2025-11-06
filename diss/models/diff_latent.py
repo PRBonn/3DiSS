@@ -13,7 +13,8 @@ import numpy as np
 import open3d as o3d
 from os import makedirs, path
 
-from pytorch_lightning.core.lightning import LightningModule
+#from pytorch_lightning.core.lightning import LightningModule
+from pytorch_lightning import LightningModule
 
 
 class DiffLatent(LightningModule):
@@ -45,18 +46,22 @@ class DiffLatent(LightningModule):
         )
 
         self.dpm_scheduler.set_timesteps(self.hparams['diff']['s_steps'])
-        self.scheduler_to_cuda()
+        self.scheduler_to_cuda(self.device)
 
-        self.sqrt_alphas_cumprod = torch.sqrt(self.dpm_scheduler.alphas_cumprod)
-        self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - self.dpm_scheduler.alphas_cumprod)
+        sqrt_acp = torch.sqrt(self.dpm_scheduler.alphas_cumprod)
+        self.register_buffer("sqrt_alphas_cumprod", sqrt_acp)
+        #self.sqrt_alphas_cumprod = torch.sqrt(self.dpm_scheduler.alphas_cumprod)
+        sqrt_om_acp = torch.sqrt(1. - self.dpm_scheduler.alphas_cumprod)
+        self.register_buffer("sqrt_one_minus_alphas_cumprod", sqrt_om_acp)
 
         # w calculation
         # compute Signal-to-Noise Ratio
-        self.snr = (self.sqrt_alphas_cumprod / self.sqrt_one_minus_alphas_cumprod) ** 2
+        snr = (self.sqrt_alphas_cumprod / self.sqrt_one_minus_alphas_cumprod) ** 2
         # truncate it with gamma
-        self.snr_weights = torch.stack([self.snr, self.gamma * torch.ones_like(self.snr)], dim=1).min(dim=1)[0]
+        snr_w = torch.stack([snr, self.gamma * torch.ones_like(snr)], dim=1).min(dim=1)[0]
         # compute weights for v-parameterization
-        self.snr_weights = self.snr_weights / (self.snr + 1)
+        snr_w = snr_w / (snr + 1)
+        self.register_buffer("snr_weights", snr_w)
 
     def zero_snr_betas(self):
         # define betas and alphas
@@ -86,15 +91,15 @@ class DiffLatent(LightningModule):
         for param, param_ema in zip(self.latent_diff.parameters(), self.latent_diff_ema.parameters()):
             param_ema.data = param_ema.data * self.hparams['train']['ema_rate'] + param.data * (1. - self.hparams['train']['ema_rate'])
 
-    def scheduler_to_cuda(self):
-        self.dpm_scheduler.timesteps = self.dpm_scheduler.timesteps.cuda()
-        self.dpm_scheduler.betas = self.dpm_scheduler.betas.cuda()
-        self.dpm_scheduler.alphas = self.dpm_scheduler.alphas.cuda()
-        self.dpm_scheduler.alphas_cumprod = self.dpm_scheduler.alphas_cumprod.cuda()
-        self.dpm_scheduler.alpha_t = self.dpm_scheduler.alpha_t.cuda()
-        self.dpm_scheduler.sigma_t = self.dpm_scheduler.sigma_t.cuda()
-        self.dpm_scheduler.lambda_t = self.dpm_scheduler.lambda_t.cuda()
-        self.dpm_scheduler.sigmas = self.dpm_scheduler.sigmas.cuda()
+    def scheduler_to_cuda(self, device):
+        self.dpm_scheduler.timesteps = self.dpm_scheduler.timesteps.to(device)
+        self.dpm_scheduler.betas = self.dpm_scheduler.betas.to(device)
+        self.dpm_scheduler.alphas = self.dpm_scheduler.alphas.to(device)
+        self.dpm_scheduler.alphas_cumprod = self.dpm_scheduler.alphas_cumprod.to(device)
+        self.dpm_scheduler.alpha_t = self.dpm_scheduler.alpha_t.to(device)
+        self.dpm_scheduler.sigma_t = self.dpm_scheduler.sigma_t.to(device)
+        self.dpm_scheduler.lambda_t = self.dpm_scheduler.lambda_t.to(device)
+        self.dpm_scheduler.sigmas = self.dpm_scheduler.sigmas.to(device)
 
         # reset scheduler for new sample otherwise it will keep stored the last sample from the previous batch
         self.dpm_scheduler.model_outputs = [None] * self.dpm_scheduler.config.solver_order
@@ -102,16 +107,16 @@ class DiffLatent(LightningModule):
         self.dpm_scheduler._step_index = None
 
     def q_sample(self, x, t, noise):
-        return self.sqrt_alphas_cumprod[t][:,None,None,None,None].cuda() * x + \
-                self.sqrt_one_minus_alphas_cumprod[t][:,None,None,None,None].cuda() * noise
+        return self.sqrt_alphas_cumprod[t][:,None,None,None,None] * x + \
+                self.sqrt_one_minus_alphas_cumprod[t][:,None,None,None,None] * noise
 
     def get_v(self, x, noise, t):
-        return self.sqrt_alphas_cumprod[t][:,None,None,None,None].cuda() * noise - self.sqrt_one_minus_alphas_cumprod[t][:,None,None,None,None].cuda() * x
+        return self.sqrt_alphas_cumprod[t][:,None,None,None,None] * noise - self.sqrt_one_minus_alphas_cumprod[t][:,None,None,None,None] * x
 
     def getDiffusionLoss(self, x, y, t):
         mse_loss = F.mse_loss(x, y, reduction='none')
         # apply weights batch-wise
-        mse_loss = mse_loss.mean(dim=list(range(1, len(mse_loss.shape)))).cuda() * self.snr_weights[t].cuda()
+        mse_loss = mse_loss.mean(dim=list(range(1, len(mse_loss.shape)))) * self.snr_weights[t]
         
         return mse_loss.mean()
 
@@ -123,14 +128,14 @@ class DiffLatent(LightningModule):
 
     def training_step(self, batch:dict, batch_idx):
         self._update_ema()
-        x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], -1)
+        x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], -1, self.global_rank, batch['filename'])
         # get the auto-encoder latent and pass it to the diffusion process
         with torch.no_grad():
             latent_args, occupancy_pred, pred_prune, target_prune  = self.forward_vae(x_occupancy, training=False)
             occupancy_latent, latent_mean, latent_logvar = latent_args
         # diffusion part
-        t = torch.randint(0, self.hparams['diff']['t_steps'], size=(len(batch['feats']),)).cuda()
-        noise = torch.randn(occupancy_latent.shape, device=torch.device('cuda'))
+        t = torch.randint(0, self.hparams['diff']['t_steps'], size=(len(batch['feats']),), device=occupancy_latent.device)
+        noise = torch.randn(occupancy_latent.shape, device=occupancy_latent.device)
         noisy_latent = self.q_sample(occupancy_latent, t, noise)
 
         pred_noise = self.forward_diff(noisy_latent, t)
@@ -143,9 +148,10 @@ class DiffLatent(LightningModule):
         return loss
 
     def p_sample_loop(self, x_t, ema=False):
-        self.scheduler_to_cuda()
+        self.scheduler_to_cuda(device=x_t.device)
         for t in tqdm(range(len(self.dpm_scheduler.timesteps))):
-            t = torch.ones((len(x_t),)).cuda().long() * self.dpm_scheduler.timesteps[t].cuda()
+            torch.cuda.empty_cache()
+            t = torch.ones((len(x_t),), device=x_t.device).long() * self.dpm_scheduler.timesteps[t]
 
             noise_t = self.forward_diff(x_t, t, ema)
             x_t_feats = self.dpm_scheduler.step(noise_t, t[0], x_t)['prev_sample']
@@ -190,7 +196,7 @@ class DiffLatent(LightningModule):
         self.latent_diff.eval()
         self.latent_diff_ema.eval()
         with torch.no_grad():
-            x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], -1) 
+            x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], -1, self.global_rank, batch['filename']) 
             # purning/occupancy loss
             latent_args, occupancy_pred, pred_prune, target_prune = self.forward_vae(x_occupancy, training=False)
             torch.cuda.empty_cache()
