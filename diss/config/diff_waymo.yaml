@@ -11,13 +11,13 @@ data:
     validation: [ '08' ]
     test: ['11', '12', '13', '14', '15', '16', '17', '18', '19', '20', '21']
     # [[x_min, x_max], [y_min, y_max], [z_min, z_max]]
-    xyz_range_train: [[-25.6, 25.6], [-25.6, 25.6], [-2.2, 4.2]]
-    xyz_range_val: [[-25.6, 25.6], [-25.6, 25.6], [-2.2, 4.2]]
+    xyz_range_train: [[-25.6, 25.6], [-25.6, 25.6], [-3.2, 3.2]]
+    xyz_range_val: [[-25.6, 25.6], [-25.6, 25.6], [-3.2, 3.2]]
 
 ##Training
 train:
     n_gpus: 8
-    num_workers: 20
+    num_workers: 12
     max_epoch: 200
     lr: 0.0002
     ema_rate: 0.9999
