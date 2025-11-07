@@ -50,7 +50,6 @@ class DiffLatent(LightningModule):
 
         sqrt_acp = torch.sqrt(self.dpm_scheduler.alphas_cumprod)
         self.register_buffer("sqrt_alphas_cumprod", sqrt_acp)
-        #self.sqrt_alphas_cumprod = torch.sqrt(self.dpm_scheduler.alphas_cumprod)
         sqrt_om_acp = torch.sqrt(1. - self.dpm_scheduler.alphas_cumprod)
         self.register_buffer("sqrt_one_minus_alphas_cumprod", sqrt_om_acp)
 
@@ -133,14 +132,16 @@ class DiffLatent(LightningModule):
         with torch.no_grad():
             latent_args, occupancy_pred, pred_prune, target_prune  = self.forward_vae(x_occupancy, training=False)
             occupancy_latent, latent_mean, latent_logvar = latent_args
+        torch.cuda.empty_cache()
         # diffusion part
         t = torch.randint(0, self.hparams['diff']['t_steps'], size=(len(batch['feats']),), device=occupancy_latent.device)
         noise = torch.randn(occupancy_latent.shape, device=occupancy_latent.device)
         noisy_latent = self.q_sample(occupancy_latent, t, noise)
+        torch.cuda.empty_cache()
 
         pred_noise = self.forward_diff(noisy_latent, t)
+        torch.cuda.empty_cache()
         loss = self.getDiffusionLoss(pred_noise, self.get_v(occupancy_latent, noise, t), t)
-
         torch.cuda.empty_cache()
 
         self.log('train/loss', loss)
