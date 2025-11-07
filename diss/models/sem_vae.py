@@ -43,8 +43,10 @@ class AutoEncoder(LightningModule):
                 solver_order=2,
         )
 
-        self.sqrt_alphas_cumprod = torch.sqrt(self.dpm_scheduler.alphas_cumprod).cuda()
-        self.sqrt_one_minus_alphas_cumprod = torch.sqrt(1. - self.dpm_scheduler.alphas_cumprod).cuda()
+        sqrt_acp = torch.sqrt(self.dpm_scheduler.alphas_cumprod)
+        self.register_buffer("sqrt_alphas_cumprod", sqrt_acp)
+        sqrt_om_acp = torch.sqrt(1. - self.dpm_scheduler.alphas_cumprod)
+        self.register_buffer("sqrt_one_minus_alphas_cumprod", sqrt_om_acp)
 
         self.model = MinkUNet(
                 in_channels=4, out_channels=self.hparams['model']['out_dim'],
@@ -76,8 +78,8 @@ class AutoEncoder(LightningModule):
         return 1 - alphas
 
     def q_sample(self, x, t, noise):
-        return self.sqrt_alphas_cumprod[t][:,None,None,None,None].cuda() * x + \
-                self.sqrt_one_minus_alphas_cumprod[t][:,None,None,None,None].cuda() * noise
+        return self.sqrt_alphas_cumprod[t][:,None,None,None,None] * x + \
+                self.sqrt_one_minus_alphas_cumprod[t][:,None,None,None,None] * noise
 
     def getLoss(self, x, y):
         torch.cuda.empty_cache()
@@ -93,7 +95,7 @@ class AutoEncoder(LightningModule):
     def getSemLoss(self, x, y):
         # during the first 25 epochs use weights to force the model to consider all classes
         if self.current_epoch < self.hparams['train']['max_epoch'] / 2 and not self.hparams['train']['refine']:# and self.sem_weights is not None:
-            loss = F.cross_entropy(x, y, ignore_index=0, weight=self.sem_weights.cuda())
+            loss = F.cross_entropy(x, y, ignore_index=0, weight=self.sem_weights.to(x.device))
         # the last 25 epochs ignore the weights so the model can optimize to achieve highest IoU
         else:
             loss = F.cross_entropy(x, y, ignore_index=0)
@@ -102,7 +104,7 @@ class AutoEncoder(LightningModule):
 
     def downsample_target(self, target, stride):
         target_coords = target.C.float()
-        target_coords[:,1:] /= torch.tensor(stride, device=torch.device('cuda'))
+        target_coords[:,1:] /= torch.tensor(stride, device=target_coords.device)
         _, mapping = ME.utils.sparse_quantize(coordinates=target_coords, return_index=True)
 
         return target_coords[mapping], target.F[mapping]
@@ -234,13 +236,14 @@ class AutoEncoder(LightningModule):
         if self.global_step == 0:
             batch['coords'] = (batch['coords'][0],)
             batch['feats'] = (batch['feats'][0],)
-        x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], self.global_step)
+        x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], self.global_step, self.global_rank, batch['filename'])
+
         with torch.no_grad():
             occupancy_latent, stride = self.forward(x_occupancy, encoder=True)
 
         # add noise to latent
-        t = torch.randint(0, int(self.hparams['diff']['t_steps']/10), size=(len(batch['feats']),)).cuda()
-        noise = torch.randn(occupancy_latent.shape, device=torch.device('cuda'))
+        t = torch.randint(0, int(self.hparams['diff']['t_steps']/10), size=(len(batch['feats']),)).to(occupancy_latent.device)
+        noise = torch.randn(occupancy_latent.shape, device=occupancy_latent.device)
         noisy_latent = self.q_sample(occupancy_latent, t, noise)
 
         decoded, occupancy_pred, pred_prune, target_prune  = self.model.forward_decoder(noisy_latent, x_occupancy.C, training=True)
