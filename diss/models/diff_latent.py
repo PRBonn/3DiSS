@@ -54,7 +54,6 @@ class DiffLatent(LightningModule):
 
         sqrt_acp = torch.sqrt(self.dpm_scheduler.alphas_cumprod)
         self.register_buffer("sqrt_alphas_cumprod", sqrt_acp)
-        #self.sqrt_alphas_cumprod = torch.sqrt(self.dpm_scheduler.alphas_cumprod)
         sqrt_om_acp = torch.sqrt(1. - self.dpm_scheduler.alphas_cumprod)
         self.register_buffer("sqrt_one_minus_alphas_cumprod", sqrt_om_acp)
 
