@@ -16,12 +16,12 @@ data:
 
 ##Training
 train:
-    n_gpus: 8
+    n_gpus: 1
     num_workers: 12
     max_epoch: 200
     lr: 0.0002
     ema_rate: 0.9999
-    batch_size: 8
+    batch_size: 1
 
 ##Network
 model:

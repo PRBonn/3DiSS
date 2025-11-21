@@ -101,6 +101,32 @@ content_indoor = {
   12: 0.12212566337045223,
 }
 
+labels_waymo = {
+  0: "UNDEFINED",
+  1: "CAR",
+  2: "TRUCK",
+  3: "BUS",
+  4: "OTHER_VEHICLE",
+  5: "MOTORCYCLIST",
+  6: "BICYCLIST",
+  7: "PEDESTRIAN",
+  8: "SIGN",
+  9: "TRAFFIC_LIGHT",
+  10: "POLE",
+  11: "CONSTRUCTION_CONE",
+  12: "BICYCLE",
+  13: "MOTORCYCLE",
+  14: "BUILDING",
+  15: "VEGETATION",
+  16: "TREE_TRUNK",
+  17: "CURB",
+  18: "ROAD",
+  19: "LANE_MARKER",
+  20: "OTHER_GROUND",
+  21: "WALKABLE",
+  22: "SIDEWALK",
+}
+
 labels = {
   0: "unlabeled",
   1: "car",

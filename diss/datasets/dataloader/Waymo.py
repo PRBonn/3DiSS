@@ -71,7 +71,7 @@ class WaymoSet(Dataset):
                 poses_raw = f.readlines()
  
             p_map, pcd_to_world = self.read_pcd_map(seq)
-            self.cache_maps[seq] = p_map
+            #self.cache_maps[seq] = p_map
 
             for pose_raw in poses_raw:
                 pose = np.array(pose_raw.split(' ')).astype(float).reshape((4,4))
@@ -110,8 +110,8 @@ class WaymoSet(Dataset):
     
             # load map for the sequence corresponding to the sampled scan and transform it to be centered at the scan pose
             #p_map = self.cache_maps[seq_num]
-            #p_map, _ = self.read_pcd_map(seq_num)
-            p_map = self.cache_maps[seq_num]
+            p_map, _ = self.read_pcd_map(seq_num)
+            #p_map = self.cache_maps[seq_num]
             trans = pose[:-1,-1]
 
             # crop an area of 51.2m circunference around the pose from the map
@@ -158,6 +158,7 @@ class WaymoSet(Dataset):
         try:
             sample_data = point_set_to_sparse(
                 np.concatenate((p_set[rand_idx], l_set[rand_idx]), axis=-1),
+                #np.concatenate((p_set, l_set), axis=-1),
                 None,
                 self.resolution,
                 index,#self.points_datapath[index],

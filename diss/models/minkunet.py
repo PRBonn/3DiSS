@@ -378,41 +378,49 @@ class MinkUNet(nn.Module):
         x2_proj = self.dense_projection(diff_latent)
 
         x2_cls = self.up0_prune_class(x2_proj).F[:,0]
-        x2_mask = x2_cls > 0.5
+        x2_mask = x2_cls > 0.3
         x2_target = self.get_target_prune(x2_proj, target_coord_map) if training else None
         x2_mask = x2_mask + x2_target if training else x2_mask
         x2_prune = self.pruning(x2_proj, x2_mask)
+        x2_size = (x2_prune.F.element_size() * x2_prune.F.nelement()) / (1024**2)
         x2_sem = self.up0_sem(x2_prune)
+        torch.cuda.empty_cache()
 
         y1 = self.up1[0](x2_prune)
         y1 = self.up1[1](y1)
 
         y1_cls = self.up1_prune_class(y1).F[:,0]
-        y1_mask = y1_cls > 0.5
+        y1_mask = y1_cls > 0.3
         y1_target = self.get_target_prune(y1, target_coord_map) if training else None
         y1_mask = y1_mask + y1_target if training else y1_mask
         y1_prune = self.pruning(y1, y1_mask)
+        y1_size = (y1_prune.F.element_size() * y1_prune.F.nelement()) / (1024**2)
         y1_sem = self.up1_sem(y1_prune)
+        torch.cuda.empty_cache()
 
         y2 = self.up2[0](y1_prune)
         y2 = self.up2[1](y2)
 
         y2_cls = self.up2_prune_class(y2).F[:,0]
-        y2_mask = y2_cls > 0.3
+        y2_mask = y2_cls > 0.15
         y2_target = self.get_target_prune(y2, target_coord_map) if training else None
         y2_mask = y2_mask + y2_target if training else y2_mask
         y2_prune = self.pruning(y2, y2_mask)
+        y2_size = (y2_prune.F.element_size() * y2_prune.F.nelement()) / (1024**2)
         y2_sem = self.up2_sem(y2_prune)
+        torch.cuda.empty_cache()
 
         y3 = self.up3[0](y2_prune)
         y3 = self.up3[1](y3)
 
         y3_cls = self.up3_prune_class(y3).F[:,0]
-        y3_mask = y3_cls > 0.3
+        y3_mask = y3_cls > 0.15
         y3_target = self.get_target_prune(y3, target_coord_map) if training else None
         y3_mask = y3_mask + y3_target if training else y3_mask
         y3_prune = self.pruning(y3, y3_mask)
+        y3_size = (y3_prune.F.element_size() * y3_prune.F.nelement()) / (1024**2)
         y3_sem = self.up3_sem(y3_prune)
+        torch.cuda.empty_cache()
 
         y4 = self.last(y3_prune)
         y4_target = self.get_target_prune(y4, target_coord_map) if training else None
@@ -420,7 +428,7 @@ class MinkUNet(nn.Module):
         if training:
             return y4, [x2_sem, y1_sem, y2_sem, y3_sem, y4], [x2_cls, y1_cls, y2_cls, y3_cls], [x2_target, y1_target, y2_target, y3_target, y4_target]
         else:
-            return y4
+            return y4, [x2_size, y1_size, y2_size, y3_size]
 
     def vae_reparametrization(self, mean, log_var, shape):
         std = torch.exp(0.5 * log_var)

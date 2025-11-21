@@ -12,6 +12,7 @@ from diss.utils.data_map import color_map
 import numpy as np
 import open3d as o3d
 from os import makedirs, path
+import time
 
 #from pytorch_lightning.core.lightning import LightningModule
 from pytorch_lightning import LightningModule
@@ -32,6 +33,9 @@ class DiffLatent(LightningModule):
         )
         self.latent_diff = LatentDiffuser(latent_dim=128, mid_attn=self.hparams['model']['mid_attn']) 
         self.latent_diff_ema = LatentDiffuser(latent_dim=128, mid_attn=self.hparams['model']['mid_attn'])
+
+        self.latent_sizes = {'x2': [], 'y1': [], 'y2': [], 'y3': [], 'time': []}
+        self.count = 0
 
         for param, param_ema in zip(self.latent_diff.parameters(), self.latent_diff_ema.parameters()):
             param_ema.data.copy_(param.data)
@@ -133,14 +137,16 @@ class DiffLatent(LightningModule):
         with torch.no_grad():
             latent_args, occupancy_pred, pred_prune, target_prune  = self.forward_vae(x_occupancy, training=False)
             occupancy_latent, latent_mean, latent_logvar = latent_args
+        torch.cuda.empty_cache()
         # diffusion part
         t = torch.randint(0, self.hparams['diff']['t_steps'], size=(len(batch['feats']),), device=occupancy_latent.device)
         noise = torch.randn(occupancy_latent.shape, device=occupancy_latent.device)
         noisy_latent = self.q_sample(occupancy_latent, t, noise)
+        torch.cuda.empty_cache()
 
         pred_noise = self.forward_diff(noisy_latent, t)
+        torch.cuda.empty_cache()
         loss = self.getDiffusionLoss(pred_noise, self.get_v(occupancy_latent, noise, t), t)
-
         torch.cuda.empty_cache()
 
         self.log('train/loss', loss)
@@ -199,24 +205,44 @@ class DiffLatent(LightningModule):
             x_occupancy = points_to_tensor(batch['coords'], batch['feats'], self.hparams['data']['resolution'], -1, self.global_rank, batch['filename']) 
             # purning/occupancy loss
             latent_args, occupancy_pred, pred_prune, target_prune = self.forward_vae(x_occupancy, training=False)
+            before_time = time.time()
+            _, latent_size = self.model.forward_decoder(latent_args[0])
+            after_time = time.time()
+            self.latent_sizes['time'].append(after_time - before_time)
+            self.latent_sizes['x2'].append(latent_size[0])
+            self.latent_sizes['y1'].append(latent_size[1])
+            self.latent_sizes['y2'].append(latent_size[2])
+            self.latent_sizes['y3'].append(latent_size[3])
+            self.count += 1
+
+            print(f'time avg size: {np.mean(self.latent_sizes["time"])}')
+            print(f'x2 avg size: {np.mean(self.latent_sizes["x2"])}')
+            print(f'y1 avg size: {np.mean(self.latent_sizes["y1"])}')
+            print(f'y2 avg size: {np.mean(self.latent_sizes["y2"])}')
+            print(f'y3 avg size: {np.mean(self.latent_sizes["y3"])}')
+
+            if self.count == 100:
+                import ipdb; ipdb.set_trace()
+
+
             torch.cuda.empty_cache()
 
             # diffusion part
-            bsize = len(batch['coords'])
-            latent_shape = torch.Size((bsize,128,64,64,16))
-            noise_in = torch.randn(latent_shape, device=torch.device('cuda'))
-            x0_pred = self.p_sample_loop(noise_in, ema=False)
+            #bsize = len(batch['coords'])
+            #latent_shape = torch.Size((bsize,128,64,64,16))
+            #noise_in = torch.randn(latent_shape, device=torch.device('cuda'))
+            #x0_pred = self.p_sample_loop(noise_in, ema=False)
 
-            decoded_x0 = self.model.forward_decoder(x0_pred)
-            torch.cuda.empty_cache()
+            #decoded_x0 = self.model.forward_decoder(x0_pred)
+            #torch.cuda.empty_cache()
 
-            for i in range(bsize):
-                pcd_x0 = self.decode_to_pcd(decoded_x0, i)
-                np.savez_compressed(f'{self.logger.log_dir}/generated_pcd/x0/{batch_idx*bsize + i}.npz', pcd_x0)
+            #for i in range(bsize):
+            #    pcd_x0 = self.decode_to_pcd(decoded_x0, i)
+            #    np.savez_compressed(f'{self.logger.log_dir}/generated_pcd/x0/{batch_idx*bsize + i}.npz', pcd_x0)
 
-                pcd_gt = np.concatenate((batch['coords'][i].cpu().numpy(), batch['feats'][i].cpu().numpy()), axis=-1)
-                pcd_gt[:,:3] = self.devoxelize(pcd_gt[:,:3])
-                np.savez_compressed(f'{self.logger.log_dir}/generated_pcd/real_data/{batch_idx*bsize + i}.npz', pcd_gt)
+            #    pcd_gt = np.concatenate((batch['coords'][i].cpu().numpy(), batch['feats'][i].cpu().numpy()), axis=-1)
+            #    pcd_gt[:,:3] = self.devoxelize(pcd_gt[:,:3])
+            #    np.savez_compressed(f'{self.logger.log_dir}/generated_pcd/real_data/{batch_idx*bsize + i}.npz', pcd_gt)
 
         torch.cuda.empty_cache()
 
