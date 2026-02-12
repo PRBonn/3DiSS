@@ -45,7 +45,7 @@ def npy_to_pcd(pcd_file):
 
     pcd = o3d.geometry.PointCloud()
     pcd.points = o3d.utility.Vector3dVector(points)
-    if 'diff_x0' in pcd_file:
+    if 'x0' in pcd_file:
         color_array = np.array(list(color_map.values()))
         colors = color_array[labels,::-1]
         pcd.colors = o3d.utility.Vector3dVector(np.array(colors)/255.)
@@ -59,12 +59,12 @@ def npy_to_pcd(pcd_file):
               type=str,
               default=None)
 def main(path):
-    pcd_list = os.listdir(os.path.join(path,'diff_x0'))
+    pcd_list = os.listdir(os.path.join(path,'x0'))
     shuffle(pcd_list)
     pcd_range = [25.6, 25.6, 2.2]
     pcd_res = 1.
     for pcd_file in tqdm(pcd_list):
-        pcd = npy_to_pcd(os.path.join(path, 'diff_x0', pcd_file))
+        pcd = npy_to_pcd(os.path.join(path, 'x0', pcd_file))
         pcd.estimate_normals()
 
         if 'single_scan' in path:

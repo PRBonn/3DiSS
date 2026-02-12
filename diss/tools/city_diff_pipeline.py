@@ -14,21 +14,14 @@ from natsort import natsorted
 from diss.utils.data_map import color_map
 import click
 
-class DiSS(LightningModule):
-    def __init__(self, diff_path, vae_path, denoising_steps, cond_weight, condition):
+class CityDiSS(LightningModule):
+    def __init__(self, diff_path, vae_path, denoising_steps):
         super().__init__()
         ckpt_diff = torch.load(diff_path)
         ckpt_vae = torch.load(vae_path)
         self.save_hyperparameters(ckpt_diff['hyper_parameters'])
-        self.condition = condition
         assert denoising_steps <= self.hparams['diff']['t_steps'], \
         f"The number of denoising steps cannot be bigger than T={self.hparams['diff']['t_steps']} (you've set '-T {denoising_steps}')"
-
-        self.cond_enc = MinkEncoder(in_channels=3,
-                resolution=self.hparams['data']['resolution'],
-                train_range=self.hparams['data']['xyz_range_train'],
-                val_range=self.hparams['data']['xyz_range_val'],
-        )
 
         self.model = MinkUNet(
                 in_channels=4, out_channels=self.hparams['model']['out_dim'],
@@ -36,14 +29,13 @@ class DiSS(LightningModule):
                 train_range=self.hparams['data']['xyz_range_train'],
                 val_range=self.hparams['data']['xyz_range_val'],
         )
-        self.latent_diff = LatentCondDiffuser(latent_dim=128, mid_attn=self.hparams['model']['mid_attn'], cond_diff=True if condition == 'single_scan' else False)
+        self.latent_diff = LatentCondDiffuser(latent_dim=128, mid_attn=self.hparams['model']['mid_attn'], cond_diff=False)
         print('Loading diffusion weights...')
         self.load_state_dict(ckpt_diff['state_dict'], strict=False)
         print('Loading VAE weights...')
         self.load_state_dict(ckpt_vae['state_dict'], strict=False)
 
         self.model.eval()
-        self.cond_enc.eval()
         self.latent_diff.eval()
         self.cuda()
 
@@ -65,10 +57,7 @@ class DiSS(LightningModule):
         self.snr_weights = torch.stack([self.snr, self.hparams['diff']['gamma'] * torch.ones_like(self.snr)], dim=1).min(dim=1)[0]
         self.snr_weights = self.snr_weights / (self.snr + 1)
 
-        self.hparams['diff']['w_cond'] = cond_weight
-        self.w_uncond = self.hparams['diff']['w_cond']
-        
-        exp_dir = diff_path.split('/')[-1].split('.')[0].replace('=','') + f'_{condition}'
+        exp_dir = diff_path.split('/')[-1].split('.')[0].replace('=','') + '_City'
         os.makedirs(f'./results/{exp_dir}', exist_ok=True)
         with open(f'./results/{exp_dir}/exp_config.yaml', 'w+') as exp_config:
             yaml.dump(self.hparams, exp_config)
@@ -110,19 +99,9 @@ class DiSS(LightningModule):
         self.dpm_scheduler.lower_order_nums = 0
         self.dpm_scheduler._step_index = None
 
-    def preprocess_scan(self, points, xyz_range):
-        #points[:,2] += 0.5
-        grid_fov = (points[:,0] > xyz_range[0][0]) & (points[:,0] < xyz_range[0][1]) &\
-                (points[:,1] > xyz_range[1][0]) & (points[:,1] < xyz_range[1][1]) &\
-                (points[:,2] > xyz_range[2][0]) & (points[:,2] < xyz_range[2][1])
-
-        x_fov = torch.tensor(points[grid_fov])
-        x_fov[:,:3] = (x_fov[:,:3] / self.hparams['data']['resolution']).trunc()
-        _, mapping = ME.utils.sparse_quantize(coordinates=x_fov[:,:3], return_index=True)
-        x_fov = x_fov[mapping]
-        x_fov[:,:3] -= x_fov[:,:3].min(0).values
-    
-        return x_fov[:,:3], torch.tensor(points[grid_fov][mapping])
+    def q_sample(self, x, t, noise):
+        return self.sqrt_alphas_cumprod[t][:,None,None,None,None].cuda() * x + \
+                self.sqrt_one_minus_alphas_cumprod[t][:,None,None,None,None].cuda() * noise
 
     def devoxelize(self, points):
         points = points * self.hparams['data']['resolution']
@@ -146,53 +125,21 @@ class DiSS(LightningModule):
             color_array = np.array(list(color_map.values()))
             colors = color_array[sem_pred,::-1]
             pcd.colors = o3d.utility.Vector3dVector(np.array(colors)/255.)
+            pcd.estimate_normals()
         else:
             # save it as .npy to be used for training
             pcd = np.concatenate((points, sem_pred[:,None]), axis=-1)
 
         return pcd
 
-    def complete_scan(self, scan, vis=True):
-        coords, feats = self.preprocess_scan(scan, self.hparams['data']['xyz_range_val'])
-
+    def uncond_sample(self, prev_latent, latent_mask, vis=True):
         latent_shape = torch.Size((1,128,64,64,16))
         noise_in = torch.randn(latent_shape, device=torch.device('cuda'))
-        x0_completion = self.completion_loop(noise_in, [(coords,), (feats,)])
-        decoded_x0 = self.model.forward_decoder(x0_completion)
-        complete_scan_x0 = self.decode_to_pcd(decoded_x0)
-
-        return complete_scan_x0
-
-    def uncond_sample(self, vis=True):
-        latent_shape = torch.Size((1,128,64,64,16))
-        noise_in = torch.randn(latent_shape, device=torch.device('cuda'))
-        x0 = self.uncond_loop(noise_in)
+        x0 = self.uncond_loop(noise_in, prev_latent, latent_mask)
         decoded_x0 = self.model.forward_decoder(x0)
-        pcd_x0 = self.decode_to_pcd(decoded_x0)
+        pcd_x0 = self.decode_to_pcd(decoded_x0, vis=True)
 
-        return pcd_x0
-
-    def classfree_forward(self, latent, cond, uncond, t):
-        with torch.no_grad():
-            x_cond = self.latent_diff(latent, t, cond)
-            x_uncond = self.latent_diff(latent, t, uncond)
-
-        x_out = x_uncond + self.hparams['diff']['w_cond'] * (x_cond - x_uncond)
-        return x_out
-
-
-    def cond_tokens(self, cond):
-        x_cond = points_to_tensor(cond[0], cond[1], self.hparams['data']['resolution'], -1)
-        x_cond = self.cond_enc(x_cond)
-
-        x_uncond = points_to_tensor(
-               [torch.zeros_like(c) for c in cond[0]],
-               [torch.zeros_like(c) for c in cond[1]],
-               self.hparams['data']['resolution'], -1
-           )
-        x_uncond = self.cond_enc(x_uncond)
-
-        return x_cond, x_uncond
+        return pcd_x0, x0
 
     def completion_loop(self, x_t, cond):
         self.scheduler_to_cuda()
@@ -208,10 +155,14 @@ class DiSS(LightningModule):
 
         return x_t
 
-    def uncond_loop(self, x_t):
+    def uncond_loop(self, x_t, prev_latent, latent_mask):
         self.scheduler_to_cuda()
         for t in tqdm(range(len(self.dpm_scheduler.timesteps))):
             t = torch.ones((len(x_t),)).cuda().long() * self.dpm_scheduler.timesteps[t].cuda()
+
+            if latent_mask.any():
+                prev_noisy = self.q_sample(prev_latent, t, torch.randn(prev_latent.shape, device=torch.device('cuda')))
+                x_t[latent_mask] = prev_noisy[latent_mask]
 
             with torch.no_grad():
                 noise_t = self.latent_diff(x_t, t)
@@ -222,14 +173,6 @@ class DiSS(LightningModule):
 
         return x_t
 
-    def diff_sample(self, scan=None, vis=True):
-        if self.condition == 'uncond':
-            return self.uncond_sample()
-
-        elif self.condition == 'single_scan':
-            return self.complete_scan(scan)
-
-
 def load_pcd(pcd_file):
     if pcd_file.endswith('.bin'):
         return np.fromfile(pcd_file, dtype=np.float32).reshape((-1,4))[:,:3]
@@ -238,44 +181,63 @@ def load_pcd(pcd_file):
     else:
         print(f"Point cloud format '.{pcd_file.split('.')[-1]}' not supported. (supported formats: .bin (kitti format), .ply)")
 
-def cond_loop(diff, path, exp_dir):
-    pcds = os.listdir(path)
+def build_prev_latent(i, j, latent_blocks, latent_rows):
+    prev_latent = torch.zeros((1,128,64,64,16)).cuda()
+    latent_mask = torch.zeros((1,128,64,64,16)).bool().cuda()
+    if i != 0:
+        prev_latent[:,:,:,:20,:] = latent_blocks[i-1][j][:,:,:,-20:,:]
+        latent_mask[:,:,:,:20,:] = True
+    if j != 0:
+        prev_latent[:,:,:20,:,:] = latent_rows[j-1][:,:,-20:,:,:]
+        latent_mask[:,:,:20,:,:] = True
 
-    for pcd_path in tqdm(pcds):
-        pcd_file = os.path.join(path, pcd_path)
-        points = load_pcd(pcd_file)
-        #points[:,2] += 0.3
-    
-        diff_scan_x0 = diff.diff_sample(points)
-        #diff_scan_x0.estimate_normals()
+    return prev_latent, latent_mask
 
-        np.savez_compressed(f'./results/{exp_dir}/x0/{pcd_path.split(".")[0]}.npz', diff_scan_x0)
-        np.savez_compressed(f'./results/{exp_dir}/cond/{pcd_path.split(".")[0]}.npz', points)
+def fit_pcd_to_city(pcd, i, j):
+    # each latent coord corresponds to 0.8m so we shift the new blocks
+    #to fit everything into a single pcd by 8 * 0.8
+    shift_x = 51.2 * j - 0.8 * 20 * j
+    shift_y = 51.2 * i - 0.8 * 20 * i
 
-def uncond_loop(diff, num_samples, exp_dir):
-    for i in range(num_samples):
-        diff_x0 = diff.diff_sample()
-        np.savez_compressed(f'./results/{exp_dir}/x0/{i}.npz', diff_x0)
+    points = np.array(pcd.points)
+    points[:,0] += shift_x
+    points[:,1] += shift_y
+    pcd.points = o3d.utility.Vector3dVector(points)
+
+    return pcd
+
+def city_loop(diff, city_size, exp_dir):
+    city_size = city_size.split('x')
+    latent_blocks = []
+
+    city_pcd = o3d.geometry.PointCloud()
+
+    for i in range(int(city_size[0])):
+        latent_row = []
+        for j in range(int(city_size[1])):
+            prev_latent, latent_mask = build_prev_latent(i, j, latent_blocks, latent_row)
+            diff_x0, latent_x0 = diff.uncond_sample(prev_latent, latent_mask, vis=True)
+            latent_row.append(latent_x0)
+            city_pcd += fit_pcd_to_city(diff_x0, i, j)
+
+        latent_blocks.append(latent_row)
+    o3d.visualization.draw_geometries([city_pcd]) 
+
+    return city_pcd
 
 @click.command()
-@click.option('--path', '-p', type=str, help='path to the condition scans')
 @click.option('--diff', '-d', type=str, default='checkpoints/diff_net.ckpt', help='path to the diffusion weights')
 @click.option('--vae', '-v', type=str, default='checkpoints/vae_net.ckpt', help='path to the VAE weights')
 @click.option('--denoising_steps', '-T', type=int, default=1000, help='number of denoising steps (default: 1000)')
-@click.option('--cond_weight', '-s', type=float, default=2.0, help='conditioning weight (default: 2.0)')
-@click.option('--condition', '-cond', type=str, default='uncond', help='path to the condition scans')
-@click.option('--num_samples', '-n', type=int, default=10, help='number of uncondtional samples to be generated (default: 10)')
-def main(path, diff, vae, denoising_steps, cond_weight, condition, num_samples):
-    exp_dir = diff.split('/')[-1].split('.')[0].replace('=','') + f'_{condition}'
+@click.option('--city_size', '-c', type=str, default='4x4', help='size of blocks to be built in the for of "NxM" (default: 4x4)')
+def main(diff, vae, denoising_steps, city_size):
+    exp_dir = diff.split('/')[-1].split('.')[0].replace('=','') + '_City'
 
-    diff = DiSS(diff, vae, denoising_steps, cond_weight, condition)
+    diff = CityDiSS(diff, vae, denoising_steps)
 
     os.makedirs(f'./results/{exp_dir}/x0', exist_ok=True)
-    if condition == 'uncond':
-        uncond_loop(diff, num_samples, exp_dir)
-    elif condition == 'single_scan':
-        os.makedirs(f'./results/{exp_dir}/cond', exist_ok=True)
-        cond_loop(diff, path, exp_dir)
+    city_pcd = city_loop(diff, city_size, exp_dir)
+    o3d.io.write_point_cloud(f'./results/{exp_dir}/x0/city.ply', city_pcd)
 
 if __name__ == '__main__':
     main()

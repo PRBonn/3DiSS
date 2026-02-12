@@ -216,6 +216,13 @@ class MinkUNet(nn.Module):
                 ME.MinkowskiSigmoid(),
             )
 
+        self.up0_sem  = nn.Sequential(
+            ME.MinkowskiLinear(cs[3], int(cs[3]/2)),
+            ME.MinkowskiLeakyReLU(0.1, inplace=True),
+            ME.MinkowskiLinear(int(cs[3]/2), out_channels),
+            ME.MinkowskiSigmoid(),
+        )
+
         self.up1 = nn.ModuleList([
             BasicDeconvolutionBlock(cs[3], cs[4], ks=2, stride=2, D=self.D),
             nn.Sequential(
@@ -229,6 +236,13 @@ class MinkUNet(nn.Module):
                 ME.MinkowskiConvolution(cs[4], 1, kernel_size=3, bias=True, stride=1, dimension=3),
                 ME.MinkowskiSigmoid(),
             )
+
+        self.up1_sem  = nn.Sequential(
+            ME.MinkowskiLinear(cs[4], int(cs[4]/2)),
+            ME.MinkowskiLeakyReLU(0.1, inplace=True),
+            ME.MinkowskiLinear(int(cs[4]/2), out_channels),
+            ME.MinkowskiSigmoid(),
+        )
 
         # stride=4 doesn't work for the generative conv, therefore we have two deconv with stride=2
         self.up2 = nn.ModuleList([
@@ -245,6 +259,13 @@ class MinkUNet(nn.Module):
                 ME.MinkowskiSigmoid(),
             )
 
+        self.up2_sem  = nn.Sequential(
+            ME.MinkowskiLinear(cs[5], int(cs[5]/2)),
+            ME.MinkowskiLeakyReLU(0.1, inplace=True),
+            ME.MinkowskiLinear(int(cs[5]/2), out_channels),
+            ME.MinkowskiSigmoid(),
+        )
+
         self.up3 = nn.ModuleList([
             BasicDeconvolutionBlock(cs[5], cs[6], ks=2, stride=2, D=self.D),
             nn.Sequential(
@@ -258,6 +279,13 @@ class MinkUNet(nn.Module):
                 ME.MinkowskiConvolution(cs[6], 1, kernel_size=3, bias=True, stride=1, dimension=3),
                 ME.MinkowskiSigmoid(),
             )
+
+        self.up3_sem  = nn.Sequential(
+            ME.MinkowskiLinear(cs[6], int(cs[6]/2)),
+            ME.MinkowskiLeakyReLU(0.1, inplace=True),
+            ME.MinkowskiLinear(int(cs[6]/2), out_channels),
+            ME.MinkowskiSigmoid(),
+        )
 
         self.pruning = ME.MinkowskiPruning()
 
@@ -354,6 +382,7 @@ class MinkUNet(nn.Module):
         x2_target = self.get_target_prune(x2_proj, target_coord_map) if training else None
         x2_mask = x2_mask + x2_target if training else x2_mask
         x2_prune = self.pruning(x2_proj, x2_mask)
+        x2_sem = self.up0_sem(x2_prune)
 
         y1 = self.up1[0](x2_prune)
         y1 = self.up1[1](y1)
@@ -363,6 +392,7 @@ class MinkUNet(nn.Module):
         y1_target = self.get_target_prune(y1, target_coord_map) if training else None
         y1_mask = y1_mask + y1_target if training else y1_mask
         y1_prune = self.pruning(y1, y1_mask)
+        y1_sem = self.up1_sem(y1_prune)
 
         y2 = self.up2[0](y1_prune)
         y2 = self.up2[1](y2)
@@ -372,6 +402,7 @@ class MinkUNet(nn.Module):
         y2_target = self.get_target_prune(y2, target_coord_map) if training else None
         y2_mask = y2_mask + y2_target if training else y2_mask
         y2_prune = self.pruning(y2, y2_mask)
+        y2_sem = self.up2_sem(y2_prune)
 
         y3 = self.up3[0](y2_prune)
         y3 = self.up3[1](y3)
@@ -381,12 +412,13 @@ class MinkUNet(nn.Module):
         y3_target = self.get_target_prune(y3, target_coord_map) if training else None
         y3_mask = y3_mask + y3_target if training else y3_mask
         y3_prune = self.pruning(y3, y3_mask)
+        y3_sem = self.up3_sem(y3_prune)
 
         y4 = self.last(y3_prune)
         y4_target = self.get_target_prune(y4, target_coord_map) if training else None
 
         if training:
-            return y4, [y1, y2, y3, y4], [x2_cls, y1_cls, y2_cls, y3_cls], [x2_target, y1_target, y2_target, y3_target, y4_target]
+            return y4, [x2_sem, y1_sem, y2_sem, y3_sem, y4], [x2_cls, y1_cls, y2_cls, y3_cls], [x2_target, y1_target, y2_target, y3_target, y4_target]
         else:
             return y4
 
@@ -432,6 +464,7 @@ class MinkUNet(nn.Module):
         x2_target = self.get_target_prune(x2_dense, target_coord_map)
         x2_mask = x2_mask + x2_target if training else x2_mask
         x2_prune = self.pruning(x2_dense, x2_mask)
+        x2_sem = self.up0_sem(x2_prune)
 
         y1 = self.up1[0](x2_prune)
         y1 = self.up1[1](y1)
@@ -441,6 +474,7 @@ class MinkUNet(nn.Module):
         y1_target = self.get_target_prune(y1, target_coord_map)
         y1_mask = y1_mask + y1_target if training else y1_mask
         y1_prune = self.pruning(y1, y1_mask)
+        y1_sem = self.up1_sem(y1_prune)
 
         y2 = self.up2[0](y1_prune)
         y2 = self.up2[1](y2)
@@ -450,6 +484,7 @@ class MinkUNet(nn.Module):
         y2_target = self.get_target_prune(y2, target_coord_map)
         y2_mask = y2_mask + y2_target if training else y2_mask
         y2_prune = self.pruning(y2, y2_mask)
+        y2_sem = self.up2_sem(y2_prune)
 
         y3 = self.up3[0](y2_prune)
         y3 = self.up3[1](y3)
@@ -459,10 +494,11 @@ class MinkUNet(nn.Module):
         y3_target = self.get_target_prune(y3, target_coord_map)
         y3_mask = y3_mask + y3_target if training else y3_mask
         y3_prune = self.pruning(y3, y3_mask)
+        y3_sem = self.up3_sem(y3_prune)
 
         y4 = self.last(y3_prune)
         y4_target = self.get_target_prune(y4, target_coord_map)
         torch.cuda.empty_cache()
 
-        return [x2_reparam, x2_mean, x2_logvar], [x2, y1, y2, y3, y4], [x2_cls, y1_cls, y2_cls, y3_cls], [x2_target, y1_target, y2_target, y3_target, y4_target]
+        return [x2_reparam, x2_mean, x2_logvar], [x2_sem, y1_sem, y2_sem, y3_sem, y4], [x2_cls, y1_cls, y2_cls, y3_cls], [x2_target, y1_target, y2_target, y3_target, y4_target]
 
