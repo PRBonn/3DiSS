@@ -40,8 +40,8 @@ RUN pip install -U git+https://github.com/NVIDIA/MinkowskiEngine -v --no-deps \
 
 
 # To fix files ownershipt set USER_ID (id -u) and GROUP_ID (id -g) to yours
-ARG USER_ID
-ARG GROUP_ID
+ARG USER_ID=1000
+ARG GROUP_ID=1000
 
 # Switch to same user as host system
 RUN addgroup --gid $GROUP_ID user
