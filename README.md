@@ -143,10 +143,13 @@ To visualize the generated point clouds we provide a visualization tool which ca
 If you use this repo, please cite as :
 
 ```bibtex
-@article{nunes2025arxiv,
-    author = {Lucas Nunes and Rodrigo Marcuzzi and Jens Behley and Cyrill Stachniss},
-    title = {{Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving}},
-    journal = arxiv,
-    year = {2025},
-    volume = {arXiv:2503.21449}
+@article{nunes2026tpami,
+author = {L. Nunes and R. Marcuzzi and J. Behley and C. Stachniss},
+title = {{Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving}},
+journal = tpami,
+year = 2026,
+volume = {},
+url = {https://arxiv.org/pdf/2503.21449},
+codeurl = {https://github.com/PRBonn/3DiSS},
+note = {Accepted}
 }
