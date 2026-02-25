@@ -1,6 +1,6 @@
 # Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving
 
-**[Paper](https://www.ipb.uni-bonn.de/pdfs/nunes2025arxiv.pdf)** **|** **[Sup. Material](https://www.ipb.uni-bonn.de/pdfs/nunes2025arxiv_suppl.pdf)**
+**[Paper](https://www.ipb.uni-bonn.de/pdfs/nunes2026tpami.pdf)** **|** **[Sup. Material](https://www.ipb.uni-bonn.de/pdfs/nunes2026tpami_suppl.pdf)**
 
 This repo contains the code for the 3D semantic scene generation method proposed in the paper: "Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving"
 
