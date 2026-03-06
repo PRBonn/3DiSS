@@ -146,10 +146,9 @@ If you use this repo, please cite as :
 @article{nunes2026tpami,
 author = {L. Nunes and R. Marcuzzi and J. Behley and C. Stachniss},
 title = {{Towards Generating Realistic 3D Semantic Training Data for Autonomous Driving}},
-journal = tpami,
+journal = {IEEE Trans. on Pattern Analysis and Machine Intelligence (TPAMI)},
 year = 2026,
 volume = {},
 url = {https://arxiv.org/pdf/2503.21449},
 codeurl = {https://github.com/PRBonn/3DiSS},
-note = {Accepted}
 }
